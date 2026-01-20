@@ -61,8 +61,8 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
 
     // === 3. 依赖注入: Hilt (新增) ===
-    implementation("com.google.dagger:hilt-android:2.50")
-    kapt("com.google.dagger:hilt-compiler:2.50")
+    implementation("com.google.dagger:hilt-android:2.54")
+    kapt("com.google.dagger:hilt-compiler:2.54")
     implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
 
     // === 4. 网络: Retrofit + OkHttp (新增) ===
@@ -75,7 +75,7 @@ dependencies {
     implementation("org.jsoup:jsoup:1.17.2")
 
     // === 6. 数据库: Room (新增) ===
-    val roomVersion = "2.6.1"
+    val roomVersion = "2.7.0"
     implementation("androidx.room:room-runtime:$roomVersion")
     implementation("androidx.room:room-ktx:$roomVersion")
     kapt("androidx.room:room-compiler:$roomVersion")
@@ -86,6 +86,9 @@ dependencies {
     // === 8. 图表: Vico (新增) ===
     implementation("com.patrykandpatrick.vico:compose-m3:1.14.0")
 
+    // === 9. 安全: Jetpack Security Crypto (新增) ===
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
+
     // === 测试相关 (保持默认) ===
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
@@ -94,4 +97,7 @@ dependencies {
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
+
+    implementation(libs.androidx.datastore.preferences)
+    implementation(libs.androidx.navigation.compose)
 }
