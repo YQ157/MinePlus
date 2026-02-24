@@ -109,6 +109,17 @@ class ScheduleViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    /** 学期开始日期（ISO-8601 字符串解析为 LocalDate），用于 UI 渲染表头日期 */
+    val semesterStartDate: StateFlow<LocalDate?> = prefs.semesterStartDate
+        .map { dateStr ->
+            if (dateStr.isNullOrBlank()) return@map null
+            try {
+                LocalDate.parse(dateStr)
+            } catch (_: Exception) {
+                null
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     init {
         // 🚀 启动时，监听 DataStore 自动计算当前周
@@ -161,5 +172,14 @@ class ScheduleViewModel @Inject constructor(
                 }
             }.collect()
         }
+    }
+
+    /**
+     * Provide a cold Flow for schedules of a specific week.
+     * Used by the pager to prefetch prev/next week to avoid a DB query when the page is first revealed.
+     */
+    fun schedulesForWeekFlow(week: Int): Flow<List<CourseSchedule>> {
+        val safeWeek = week.coerceAtLeast(1)
+        return courseDao.getSchedulesByWeek(safeWeek)
     }
 }

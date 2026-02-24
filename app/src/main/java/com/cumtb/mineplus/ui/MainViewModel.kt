@@ -1,5 +1,6 @@
 package com.cumtb.mineplus.ui
 
+import android.webkit.CookieManager
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cumtb.mineplus.data.preference.AppPreferences
@@ -48,6 +49,21 @@ class MainViewModel @Inject constructor(
     fun testFetchData(onLoginSuccess: () -> Unit) {
         viewModelScope.launch {
             repository.refreshAllData(onLoginSuccess)
+        }
+    }
+
+    fun logout(onCompleted: () -> Unit = {}) {
+        viewModelScope.launch {
+            // 1) Clear local remembered credentials
+            prefs.setRememberPassword(false)
+            credentialStorage.clear()
+
+            // 2) Clear WebView/OkHttp cookies (this app's CookieJar reads from CookieManager)
+            val cm = CookieManager.getInstance()
+            cm.removeAllCookies(null)
+            cm.flush()
+
+            onCompleted()
         }
     }
 }
