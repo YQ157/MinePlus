@@ -33,6 +33,11 @@ class MainViewModel @Inject constructor(
         )
     }
 
+    suspend fun hasRememberedCredentials(): Boolean {
+        val remember = prefs.rememberPassword.first()
+        return remember && credentialStorage.hasCredentials()
+    }
+
     suspend fun persistCredentials(
         rememberPassword: Boolean,
         username: String,
@@ -46,9 +51,33 @@ class MainViewModel @Inject constructor(
         }
     }
 
+    /**
+     * 手动 WebView 登录成功时使用：允许保留“记住密码”开关和用户名，但不保存密码。
+     */
+    suspend fun persistUsernameOnlyWhenRememberEnabled(
+        rememberPassword: Boolean,
+        username: String
+    ) {
+        prefs.setRememberPassword(rememberPassword)
+        if (rememberPassword) {
+            credentialStorage.saveUsernameOnly(username)
+        } else {
+            credentialStorage.clear()
+        }
+    }
+
     fun testFetchData(onLoginSuccess: () -> Unit) {
         viewModelScope.launch {
             repository.refreshAllData(onLoginSuccess)
+        }
+    }
+
+    fun clearSession(onCompleted: () -> Unit = {}) {
+        viewModelScope.launch {
+            val cm = CookieManager.getInstance()
+            cm.removeAllCookies(null)
+            cm.flush()
+            onCompleted()
         }
     }
 

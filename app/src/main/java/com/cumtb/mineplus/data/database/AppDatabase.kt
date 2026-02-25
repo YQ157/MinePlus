@@ -10,7 +10,7 @@ import androidx.room.RoomDatabase
 @Database(
     // 注册两张表：课程静态信息表 + 日程排课表
     entities = [CourseEntity::class, ScheduleEntity::class],
-    version = 1,
+    version = 2,
     exportSchema = false // 不导出 Schema 文件，避免编译警告
 )
 abstract class AppDatabase : RoomDatabase() {

@@ -9,19 +9,21 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.cumtb.mineplus.ui.MainViewModel
 import com.cumtb.mineplus.ui.about.AboutScreen
 import com.cumtb.mineplus.ui.login.LoginScreen
-import com.cumtb.mineplus.ui.schedule.ScheduleScreen
+import com.cumtb.mineplus.ui.main.MainScreen
 import com.cumtb.mineplus.ui.splash.SplashScreen
 import com.cumtb.mineplus.ui.theme.MinePlusTheme
 import dagger.hilt.android.AndroidEntryPoint
-import androidx.hilt.navigation.compose.hiltViewModel
+import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -37,6 +39,7 @@ class MainActivity : ComponentActivity() {
                     // 1. 创建导航控制器
                     val navController = rememberNavController()
                     val mainViewModel: MainViewModel = hiltViewModel()
+                    val scope = rememberCoroutineScope()
 
                     // 2. 定义导航主机，起始站是 splash
                     NavHost(navController = navController, startDestination = "splash") {
@@ -72,17 +75,29 @@ class MainActivity : ComponentActivity() {
                             )
                         }
 
-                        // C. 课表页
+                        // 登录后主界面（底部导航）
                         composable("schedule") {
-                            ScheduleScreen(
+                            MainScreen(
                                 onNavigateToAbout = {
                                     navController.navigate("about")
                                 },
                                 onRelogin = {
-                                    mainViewModel.logout {
-                                        navController.navigate("login") {
-                                            popUpTo("schedule") { inclusive = true }
-                                            launchSingleTop = true
+                                    scope.launch {
+                                        mainViewModel.clearSession {
+                                            navController.navigate("login") {
+                                                popUpTo("schedule") { inclusive = true }
+                                                launchSingleTop = true
+                                            }
+                                        }
+                                    }
+                                },
+                                onNavigateToLogin = {
+                                    scope.launch {
+                                        mainViewModel.clearSession {
+                                            navController.navigate("login") {
+                                                popUpTo("schedule") { inclusive = true }
+                                                launchSingleTop = true
+                                            }
                                         }
                                     }
                                 }

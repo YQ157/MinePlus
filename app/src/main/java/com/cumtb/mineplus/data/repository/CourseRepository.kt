@@ -39,7 +39,7 @@ class CourseRepository @Inject constructor(
 
             // --- 阶段 A: 获取课程清单 (get-data) ---
             Log.d("MinePlus", "2️⃣ 请求课程清单 (get-data)...")
-            val courseRes = api.getScheduleData(281)
+            val courseRes = api.getScheduleData(201)
 
             // 🔥🔥🔥 新增：计算并保存学期时间信息 🔥🔥🔥
             val currentWeek = courseRes.currentWeek ?: 1
@@ -93,11 +93,21 @@ class CourseRepository @Inject constructor(
             // 2. 构建 CourseEntity 列表
             val courseEntities = allLessons.map { json ->
                 val id = json.id.toLong()
+
+                val theory = json.course?.theory ?: json.theory
+                val practice = json.course?.practice ?: json.practice
+                val weightedCalc = when {
+                    theory == true && practice != true -> true
+                    practice == true && theory != true -> false
+                    else -> null // 同为 true / 全 false / 缺失，都按未知处理
+                }
+
                 CourseEntity(
                     lessonId = id,
                     name = json.course?.nameZh ?: "未知课程",
                     teacher = json.teacherAssignmentList?.firstOrNull()?.person?.nameZh ?: "",
                     credit = json.course?.credits ?: 0f,
+                    weightedCalc = weightedCalc,
                     colorIndex = colorMap[id] ?: 0, // 👈 写入颜色编号
                     rawScheduleText = null
                 )

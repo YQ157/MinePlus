@@ -37,6 +37,23 @@ class CredentialStorage @Inject constructor(
         }
     }
 
+    /**
+     * 仅保存用户名，并确保密码不会被持久化。
+     * 用于“手动 WebView 登录成功”的兜底流程：允许下次自动填学号，但不保存密码。
+     */
+    fun saveUsernameOnly(username: String) {
+        prefs.edit {
+            putString(KEY_USERNAME, username)
+            remove(KEY_PASSWORD)
+        }
+    }
+
+    fun clearPassword() {
+        prefs.edit {
+            remove(KEY_PASSWORD)
+        }
+    }
+
     fun clear() {
         prefs.edit {
             clear()

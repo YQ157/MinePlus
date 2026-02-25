@@ -8,12 +8,16 @@ import com.cumtb.mineplus.data.model.CourseSchedule
 import com.cumtb.mineplus.data.preference.AppPreferences
 import com.cumtb.mineplus.data.repository.CourseRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
+import javax.inject.Inject
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
-import javax.inject.Inject
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
@@ -83,32 +87,6 @@ class ScheduleViewModel @Inject constructor(
             initialValue = emptyList()
         )
 
-    // 5. 表头日期流 (Mon 1/19, Tue 1/20...)
-    // 我们从 scheduleFlow 里随便拿一节课的 date，倒推这一周的周一日期
-    val weekDates: StateFlow<List<LocalDate>> = scheduleFlow
-        .map { schedules ->
-            if (schedules.isEmpty()) {
-                // 如果这周没课，就没法从数据反推日期，暂时返回空或者根据 selectedWeek 估算（如果做了开学日期配置）
-                // 这里为了简单，如果没数据就返回空列表，UI 显示通用表头
-                emptyList()
-            } else {
-                // 随便找一节课，比如 "2025-05-29" (周四)
-                val sample = schedules.first()
-                try {
-                    val date = LocalDate.parse(sample.date) // 解析日期
-                    val dayOfWeek = sample.dayOfWeek // 4
-                    // 倒推周一：日期 - (周几 - 1) 天
-                    val monday = date.minusDays((dayOfWeek - 1).toLong())
-
-                    // 生成周一到周日的日期列表
-                    List(7) { i -> monday.plusDays(i.toLong()) }
-                } catch (e: Exception) {
-                    emptyList()
-                }
-            }
-        }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
     /** 学期开始日期（ISO-8601 字符串解析为 LocalDate），用于 UI 渲染表头日期 */
     val semesterStartDate: StateFlow<LocalDate?> = prefs.semesterStartDate
         .map { dateStr ->
@@ -120,6 +98,15 @@ class ScheduleViewModel @Inject constructor(
             }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    // 5. 表头日期流 (Mon 1/19, Tue 1/20...)
+    // 直接用“学期开始日期 + selectedWeek”来算，不再依赖 DB 里某节课的 date，避免周切换时表头跟着数据抖动。
+    // 约定：semesterStartDate 是“第 1 周的周一”。
+    val weekDates: StateFlow<List<LocalDate>> = combine(_selectedWeek, semesterStartDate) { week, start ->
+        if (start == null) return@combine emptyList()
+        val monday = start.plusDays(((week - 1).coerceAtLeast(0) * 7L))
+        List(7) { i -> monday.plusDays(i.toLong()) }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     init {
         // 🚀 启动时，监听 DataStore 自动计算当前周
@@ -174,6 +161,80 @@ class ScheduleViewModel @Inject constructor(
         }
     }
 
+    // --- 按周热缓存（用于 pager 相邻页丝滑露出） ---
+    private val weekStateCache = mutableMapOf<Int, StateFlow<List<CourseSchedule>>>()
+    private val lastWeekValueCache = mutableMapOf<Int, List<CourseSchedule>>()
+
+    /**
+     * A hot StateFlow for a given week.
+     * - Caches per-week flows to avoid cold-start when a page first becomes visible.
+     * - Uses last known value as initialValue to reduce empty->data layout thrash.
+     */
+    fun schedulesForWeekState(week: Int): StateFlow<List<CourseSchedule>> {
+        val max = _maxWeek.value.coerceAtLeast(1)
+        val safeWeek = week.coerceIn(1, max)
+
+        return weekStateCache.getOrPut(safeWeek) {
+            courseDao.getSchedulesByWeek(safeWeek)
+                .onEach { list -> lastWeekValueCache[safeWeek] = list }
+                .stateIn(
+                    scope = viewModelScope,
+                    // Keep it warm for a while to cover quick swipes between adjacent weeks.
+                    started = SharingStarted.WhileSubscribed(stopTimeoutMillis = 60_000),
+                    initialValue = lastWeekValueCache[safeWeek] ?: emptyList()
+                )
+        }
+    }
+
+    // --- 预取 ---
+    private var prefetchJob: Job? = null
+
+    /** Best-effort prefetch of a single week (used by swipe-threshold prefetch). */
+    fun prefetchWeek(week: Int) {
+        val max = _maxWeek.value.coerceAtLeast(1)
+        val safeWeek = week.coerceIn(1, max)
+        // Ensure the hot StateFlow is created, and trigger a first emission.
+        schedulesForWeekState(safeWeek)
+        viewModelScope.launch {
+            courseDao.getSchedulesByWeek(safeWeek)
+                .take(1)
+                .catch { /* best-effort */ }
+                .collect()
+        }
+    }
+
+    /**
+     * Prefetch schedules around a given week (typically current/prev/next).
+     *
+     * This is a best-effort, UI-independent optimization: it warms up Room/SQLite work
+     * so the adjacent pager pages are less likely to stutter on first reveal.
+     */
+    fun prefetchWeeksAround(week: Int) {
+        val max = _maxWeek.value.coerceAtLeast(1)
+        val safeWeek = week.coerceIn(1, max)
+        val weeks = listOf(safeWeek - 1, safeWeek, safeWeek + 1)
+            .map { it.coerceIn(1, max) }
+            .distinct()
+
+        // Cancel previous prefetch to avoid piling up collectors during fast flings.
+        prefetchJob?.cancel()
+        prefetchJob = viewModelScope.launch {
+            // Short-lived collection is enough to trigger relevant DB work.
+            // If the DAO flow is backed by Room invalidation, first emission should come quickly.
+            val jobs = weeks.map { w ->
+                launch {
+                    courseDao.getSchedulesByWeek(w)
+                        .take(1)
+                        .catch { /* best-effort: ignore */ }
+                        .collect()
+                }
+            }
+            // Give the children a tiny window; then cancel anything still running.
+            delay(300)
+            jobs.forEach { it.cancel() }
+        }
+    }
+
     /**
      * Provide a cold Flow for schedules of a specific week.
      * Used by the pager to prefetch prev/next week to avoid a DB query when the page is first revealed.
@@ -181,5 +242,102 @@ class ScheduleViewModel @Inject constructor(
     fun schedulesForWeekFlow(week: Int): Flow<List<CourseSchedule>> {
         val safeWeek = week.coerceAtLeast(1)
         return courseDao.getSchedulesByWeek(safeWeek)
+    }
+
+    // --- 屏幕级按周聚合缓存 ---
+    // UI 声明“当前需要的周集合”（通常 prev/current/next），VM 负责：
+    // 1) IO/Default 线程拉取/去重/排序
+    // 2) 汇总为 Map<week, schedules>
+    // 3) 用 StateFlow 推给 UI（UI 只 collect 一次，pager item O(1) 查表）
+    private val activeWeeks = MutableStateFlow<Set<Int>>(emptySet())
+
+    /**
+     * VM 输出：当前激活周的课表 Map。
+     * 注意：CourseSchedule 本身没有 week 字段，所以这里基于 DAO 的 getSchedulesByWeek(week) 聚合。
+     */
+    val schedulesByWeek: StateFlow<Map<Int, List<CourseSchedule>>> =
+        combine(activeWeeks, _maxWeek) { weeks, max ->
+            weeks
+                .map { it.coerceIn(1, max.coerceAtLeast(1)) }
+                .toSet()
+        }
+            .flatMapLatest { weeks ->
+                if (weeks.isEmpty()) {
+                    flowOf(emptyMap())
+                } else {
+                    combine(
+                        weeks.map { w ->
+                            // 复用现有的 hot per-week StateFlow，避免“首次露出”冷启动。
+                            schedulesForWeekState(w)
+                                .map { list ->
+                                    // 这里做轻量的去重/排序，放到 Default 上做。
+                                    val normalized = list
+                                        .distinctBy { it.id }
+                                        .sortedWith(
+                                            compareBy<CourseSchedule> { it.dayOfWeek }
+                                                .thenBy { it.startNode }
+                                                .thenBy { it.step }
+                                                .thenBy { it.courseName }
+                                        )
+                                    w to normalized
+                                }
+                        }
+                    ) { pairs ->
+                        pairs.toMap()
+                    }
+                }
+            }
+            .flowOn(Dispatchers.Default)
+            .stateIn(
+                scope = viewModelScope,
+                started = SharingStarted.WhileSubscribed(stopTimeoutMillis = 60_000),
+                initialValue = emptyMap()
+            )
+
+    /** UI 调用：声明当前希望 VM 准备/缓存的周集合（通常 prev/current/next）。 */
+    fun activateWeeks(weeks: Set<Int>) {
+        val max = _maxWeek.value.coerceAtLeast(1)
+        val normalized = weeks
+            .map { it.coerceIn(1, max) }
+            .toSet()
+        if (normalized != activeWeeks.value) {
+            activeWeeks.value = normalized
+        }
+    }
+
+    private var warmUpJob: Job? = null
+
+    /**
+     * App 启动后预热（best-effort）。目的：让第一次点开“周课表”不需要再冷启动 Room 查询。
+     *
+     * 策略：
+     * - 延迟一小段时间，避开冷启动首帧的关键路径
+     * - 只预热「当前周 + 前后各 1 周」
+     * - 复用现有 per-week hot cache + prefetchWeeksAround
+     */
+    fun warmUpAfterAppStart(delayMillis: Long = 800L) {
+        // 去重：避免多处入口反复触发
+        if (warmUpJob?.isActive == true) return
+
+        warmUpJob = viewModelScope.launch(start = CoroutineStart.UNDISPATCHED) {
+            // 让出首帧/首屏动画时间
+            delay(delayMillis)
+
+            val max = _maxWeek.value.coerceAtLeast(1)
+            val week = _selectedWeek.value.coerceIn(1, max)
+
+            // 1) 预取 Room（短收集触发 SQLite）
+            prefetchWeeksAround(week)
+
+            // 2) 同时激活 schedulesByWeek 的聚合（会触发 Default 上的排序去重），
+            //    让 Week 页首次打开直接命中 Map。
+            activateWeeks(
+                setOf(
+                    (week - 1).coerceIn(1, max),
+                    week,
+                    (week + 1).coerceIn(1, max)
+                )
+            )
+        }
     }
 }

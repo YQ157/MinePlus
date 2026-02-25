@@ -49,12 +49,15 @@ interface CourseDao {
             -- 2. 选取 courses 表的字段 (注意起别名对应 CourseSchedule 类)
             courses.name as courseName,
             courses.teacher,
+            courses.credit,
+            courses.rawScheduleText,
+            courses.weightedCalc,
             courses.colorIndex
             
         FROM schedules
         -- 3. 联表条件：通过 lessonId 匹配
         INNER JOIN courses ON schedules.lessonId = courses.lessonId
-        
+
         -- 4. 过滤条件：只取指定的周
         WHERE schedules.weekIndex = :weekIndex
         

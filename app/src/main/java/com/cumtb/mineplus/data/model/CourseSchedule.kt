@@ -18,5 +18,8 @@ data class CourseSchedule(
     // --- 来自 courses 表 ---
     val courseName: String, // 课程名 (在 SQL 里起别名映射过来)
     val teacher: String,
+    val credit: Float,
+    val rawScheduleText: String?,
+    val weightedCalc: Boolean?,
     val colorIndex: Int     // 0-14 的颜色索引
 )

@@ -11,6 +11,14 @@ data class CourseEntity(
     val teacher: String,
     val credit: Float,
 
+    /**
+     * 是否计入加权：
+     * - true: 计入加权（theory）
+     * - false: 不计入加权（practice）
+     * - null: 后端未提供/无法判断
+     */
+    val weightedCalc: Boolean? = null,
+
     // 🎨 核心：只存颜色编号 (0~14)，具体颜色由 UI 根据主题决定
     val colorIndex: Int,
 

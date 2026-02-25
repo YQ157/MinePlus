@@ -1,6 +1,5 @@
 package com.cumtb.mineplus.ui.schedule
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -27,7 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -37,21 +36,29 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.cumtb.mineplus.data.model.CourseSchedule
 import com.cumtb.mineplus.ui.theme.CoursePalettes
+import com.cumtb.mineplus.ui.theme.Dimens
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
-import kotlinx.coroutines.launch
+import kotlin.math.abs
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -66,10 +73,8 @@ fun ScheduleScreen(
     val isLoading by viewModel.isLoading.collectAsState()
     val semesterStartDate by viewModel.semesterStartDate.collectAsState()
 
-    // 预取：当前/前一周/后一周，避免左右页首次露出时触发 DB 查询导致卡顿
-    val schedulesThisWeek by viewModel.schedulesForWeekFlow(selectedWeek).collectAsState(initial = emptyList())
-    val schedulesPrevWeek by viewModel.schedulesForWeekFlow((selectedWeek - 1).coerceAtLeast(1)).collectAsState(initial = emptyList())
-    val schedulesNextWeek by viewModel.schedulesForWeekFlow((selectedWeek + 1).coerceAtMost(maxWeek.coerceAtLeast(1))).collectAsState(initial = emptyList())
+    // 只订阅一次：按周聚合后的 Map
+    val schedulesByWeek by viewModel.schedulesByWeek.collectAsState()
 
     // Pager: page 0 对应第 1 周
     val pagerState = rememberPagerState(
@@ -77,23 +82,43 @@ fun ScheduleScreen(
         pageCount = { maxWeek.coerceAtLeast(1) }
     )
 
-    // external selectedWeek -> pager
+    // B: external selectedWeek -> pager（仅在外部强制改周且当前不在滑动时对齐，避免来回打架）
     LaunchedEffect(selectedWeek, maxWeek) {
         val target = (selectedWeek - 1).coerceIn(0, (maxWeek - 1).coerceAtLeast(0))
-        if (pagerState.currentPage != target) {
-            // 外部周次变更（自动定位/下拉刷新后修正）时直接对齐页面
+        if (!pagerState.isScrollInProgress && pagerState.currentPage != target) {
+            // 外部周次变更（自动定位/下拉刷新后修正）时对齐页面
             pagerState.scrollToPage(target)
         }
     }
 
-    // pager settled -> selectedWeek (avoid syncing on every drag frame)
+    // B+D: pager settled -> selectedWeek（单一入口回写） + 预取
     LaunchedEffect(pagerState) {
-        snapshotFlow { pagerState.settledPage }.collect { page ->
-            val week = page + 1
-            if (week != selectedWeek) {
-                viewModel.onWeekSelected(week)
+        snapshotFlow { pagerState.settledPage }
+            .distinctUntilChanged()
+            .collect { page ->
+                val week = page + 1
+                if (week != selectedWeek) {
+                    viewModel.onWeekSelected(week)
+                }
+                viewModel.prefetchWeeksAround(week)
             }
-        }
+    }
+
+    // 2) 预取前移：拖拽接近边界就预取相邻周（去重），让“刚露出相邻周”更平滑
+    var lastPrefetchWeek by remember { mutableIntStateOf(-1) }
+    LaunchedEffect(pagerState) {
+        snapshotFlow { pagerState.currentPage to pagerState.currentPageOffsetFraction }
+            .collect { (page, offset) ->
+                val threshold = 0.35f
+                if (abs(offset) < threshold) return@collect
+
+                val currentWeek = page + 1
+                val targetWeek = if (offset > 0f) currentWeek + 1 else currentWeek - 1
+                if (targetWeek != lastPrefetchWeek) {
+                    lastPrefetchWeek = targetWeek
+                    viewModel.prefetchWeek(targetWeek)
+                }
+            }
     }
 
     val pullState = rememberPullToRefreshState()
@@ -108,12 +133,37 @@ fun ScheduleScreen(
     var menuExpanded by remember { mutableStateOf(false) }
     var weekMenuExpanded by remember { mutableStateOf(false) }
 
-    val menuIconSize = 48.dp
+    // Keep the TopAppBar compact. 48.dp tends to make the bar feel too tall.
+    val menuIconSize = 36.dp
     val scope = rememberCoroutineScope()
+
+    // When the pager moves, tell VM which weeks we care about (prev/current/next).
+    LaunchedEffect(pagerState, maxWeek) {
+        fun weeksAround(page: Int): Set<Int> {
+            val safeMax = maxWeek.coerceAtLeast(1)
+            val currentWeek = (page + 1).coerceIn(1, safeMax)
+            return setOf(
+                (currentWeek - 1).coerceIn(1, safeMax),
+                currentWeek,
+                (currentWeek + 1).coerceIn(1, safeMax)
+            )
+        }
+
+        // prime
+        viewModel.activateWeeks(weeksAround(pagerState.currentPage))
+
+        snapshotFlow { pagerState.currentPage }
+            .distinctUntilChanged()
+            .collect { page ->
+                viewModel.activateWeeks(weeksAround(page))
+            }
+    }
 
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
+                // Keep just a tiny gap to the status bar.
+                windowInsets = WindowInsets.statusBars,
                 navigationIcon = {
                     // Reserve the same space as the action icon so the title stays centered.
                     Spacer(modifier = Modifier.size(menuIconSize))
@@ -122,7 +172,7 @@ fun ScheduleScreen(
                     // 标题显示当前周，点击弹出周次选择（周次切换的滑动过程放到主体 Pager）
                     Text(
                         text = "第 $selectedWeek 周",
-                        style = MaterialTheme.typography.titleMedium,
+                        style = MaterialTheme.typography.titleLarge,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier
@@ -138,7 +188,12 @@ fun ScheduleScreen(
                         val safeMax = maxWeek.coerceAtLeast(1)
                         for (week in 1..safeMax) {
                             DropdownMenuItem(
-                                text = { Text("第 $week 周") },
+                                text = { 
+                                    Text(
+                                        text = "第 $week 周",
+                                        style = MaterialTheme.typography.bodyMedium
+                                    ) 
+                                },
                                 onClick = {
                                     weekMenuExpanded = false
                                     scope.launch {
@@ -164,14 +219,24 @@ fun ScheduleScreen(
                         onDismissRequest = { menuExpanded = false }
                     ) {
                         DropdownMenuItem(
-                            text = { Text("关于") },
+                            text = { 
+                                Text(
+                                    text = "关于",
+                                    style = MaterialTheme.typography.bodyMedium
+                                ) 
+                            },
                             onClick = {
                                 menuExpanded = false
                                 onNavigateToAbout()
                             }
                         )
                         DropdownMenuItem(
-                            text = { Text("重新登录") },
+                            text = {
+                                Text(
+                                    text = "重新登录",
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            },
                             onClick = {
                                 menuExpanded = false
                                 onRelogin()
@@ -179,10 +244,11 @@ fun ScheduleScreen(
                         )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    actionIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                // Match Today screen: white/neutral top bar.
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    titleContentColor = MaterialTheme.colorScheme.onBackground,
+                    actionIconContentColor = MaterialTheme.colorScheme.onBackground
                 )
             )
         }
@@ -197,23 +263,17 @@ fun ScheduleScreen(
             HorizontalPager(
                 state = pagerState,
                 modifier = Modifier.fillMaxSize(),
-                key = { page -> page }
+                key = { page -> page },
+                beyondViewportPageCount = 1
             ) { page ->
                 val week = page + 1
-                val weekSchedules: List<CourseSchedule> = when (week) {
-                    selectedWeek -> schedulesThisWeek
-                    selectedWeek - 1 -> schedulesPrevWeek
-                    selectedWeek + 1 -> schedulesNextWeek
-                    else -> emptyList()
-                }
+                val weekSchedules = schedulesByWeek[week].orEmpty()
 
-                key(page) {
-                    ScheduleWeekPage(
-                        week = week,
-                        schedules = weekSchedules,
-                        semesterStartDate = semesterStartDate
-                    )
-                }
+                ScheduleWeekPage(
+                    week = week,
+                    schedules = weekSchedules,
+                    semesterStartDate = semesterStartDate
+                )
             }
 
             // 触发刷新：当手势进入 refreshing 状态
@@ -242,19 +302,68 @@ private fun ScheduleWeekPage(
         ScrollState(initial = 0)
     }
 
+    // 计算“今天”是否在当前周内：不在则不高亮
+    val todayColumnIndex: Int? = remember(week, semesterStartDate) {
+        val start = semesterStartDate ?: return@remember null
+        val today = LocalDate.now()
+        val daysFromStart = java.time.temporal.ChronoUnit.DAYS.between(start, today).toInt()
+        if (daysFromStart < 0) return@remember null
+
+        val todayWeek = (daysFromStart / 7) + 1
+        if (todayWeek != week) return@remember null
+
+        // LocalDate.dayOfWeek.value: 1..7 (Mon..Sun)
+        today.dayOfWeek.value - 1
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
         WeekHeaderRow(
             selectedWeek = week,
-            semesterStartDate = semesterStartDate
+            semesterStartDate = semesterStartDate,
+            highlightedDayIndex = todayColumnIndex
         )
 
         Row(modifier = Modifier.fillMaxSize()) {
             TimeSidebar(scrollState = sharedVScrollState)
             Box(modifier = Modifier.weight(1f)) {
-                ScheduleContent(
-                    schedules = schedules,
-                    scrollState = sharedVScrollState
-                )
+                // --- overlay expand state (single expanded) ---
+                var expandedAnchor by remember(week) { mutableStateOf<CourseOverlayAnchor?>(null) }
+                var overlayHostSize by remember(week) { mutableStateOf<IntSize?>(null) }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .onGloballyPositioned { coords ->
+                            val newSize = coords.size
+                            if (overlayHostSize != newSize) {
+                                overlayHostSize = newSize
+                            }
+                        }
+                ) {
+                    ScheduleContent(
+                        schedules = schedules,
+                        scrollState = sharedVScrollState,
+                        highlightedDayIndex = todayColumnIndex,
+                        onCourseClick = { course, boundsInHost ->
+                             expandedAnchor = if (expandedAnchor?.courseId == course.id) {
+                                null
+                            } else {
+                                CourseOverlayAnchor(
+                                    courseId = course.id,
+                                    course = course,
+                                    boundsInRoot = boundsInHost
+                                )
+                            }
+                        }
+                    )
+
+                    CourseOverlayHost(
+                        expandedAnchor = expandedAnchor,
+                        viewportSize = overlayHostSize,
+                        onDismissRequest = { expandedAnchor = null },
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
             }
         }
     }
@@ -263,7 +372,8 @@ private fun ScheduleWeekPage(
 @Composable
 private fun WeekHeaderRow(
     selectedWeek: Int,
-    semesterStartDate: LocalDate?
+    semesterStartDate: LocalDate?,
+    highlightedDayIndex: Int?
 ) {
     // (grid lines are drawn in ScheduleContent; header just shows labels)
     val days = listOf("周一", "周二", "周三", "周四", "周五", "周六", "周日")
@@ -273,6 +383,12 @@ private fun WeekHeaderRow(
     val mondayOfWeek: LocalDate? = remember(selectedWeek, semesterStartDate) {
         semesterStartDate?.plusDays(((selectedWeek - 1).coerceAtLeast(0) * 7).toLong())
     }
+
+    // Today highlight tuning:
+    // - fill 轻一点，避免把文字背景染得太重
+    // - border 清晰一点，保证深色/浅色都能一眼看出
+    val todayFillColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.16f)
+    val todayBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.70f)
 
     Row(
         modifier = Modifier
@@ -289,7 +405,7 @@ private fun WeekHeaderRow(
         ) {
             Text(
                 text = "时间",
-                style = MaterialTheme.typography.labelSmall,
+                style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
@@ -299,21 +415,22 @@ private fun WeekHeaderRow(
                 ?.plusDays(index.toLong())
                 ?.format(formatter)
 
+            val highlightColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.06f)
+
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .fillMaxHeight(),
+                    .fillMaxHeight()
+                    .background(if (highlightedDayIndex == index) highlightColor else Color.Transparent),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = if (dateText != null) "$day\n$dateText" else day,
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.labelMedium,
                     maxLines = 2,
                     overflow = TextOverflow.Clip,
                     color = MaterialTheme.colorScheme.onSurface,
-                    textAlign = TextAlign.Center,
-                    lineHeight = 14.sp
+                    textAlign = TextAlign.Center
                 )
             }
         }
@@ -321,7 +438,7 @@ private fun WeekHeaderRow(
 }
 
 @Composable
-fun TimeSidebar(scrollState: androidx.compose.foundation.ScrollState) {
+fun TimeSidebar(scrollState: ScrollState) {
     val timeLabels = remember {
         listOf(
             "08:00",
@@ -343,7 +460,7 @@ fun TimeSidebar(scrollState: androidx.compose.foundation.ScrollState) {
         modifier = Modifier
             .width(ScheduleDimens.SidebarWidth)
             .verticalScroll(scrollState)
-            .padding(vertical = 4.dp),
+            .padding(vertical = Dimens.tiny),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         // 生成 1 到 12 的刻度（节次 + 时间）
@@ -355,8 +472,7 @@ fun TimeSidebar(scrollState: androidx.compose.foundation.ScrollState) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
                         text = "$i",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onBackground
                     )
                     Text(
@@ -372,76 +488,138 @@ fun TimeSidebar(scrollState: androidx.compose.foundation.ScrollState) {
 }
 
 @Composable
-fun ScheduleContent(
+internal fun ScheduleContent(
     schedules: List<CourseSchedule>,
-    scrollState: androidx.compose.foundation.ScrollState
+    scrollState: ScrollState,
+    highlightedDayIndex: Int?,
+    onCourseClick: (CourseSchedule, Rect) -> Unit = { _, _ -> }
 ) {
     val gridLineColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
 
-    BoxWithConstraints(
+    var containerSize by remember { mutableStateOf(IntSize.Zero) }
+    val density = androidx.compose.ui.platform.LocalDensity.current
+
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(scrollState)
+            .onSizeChanged { containerSize = it }
     ) {
-        // Explicitly use BoxWithConstraints scope values (maxWidth/maxHeight)
-        val dayWidth = this.maxWidth / 7
+        if (containerSize.width <= 0) return@Box
+
+        val dayWidth = with(density) { (containerSize.width / 7f).toDp() }
         val cellHeight = ScheduleDimens.CellHeight
 
-        // Grid background: draw lines in one Canvas (less layout work than 12 bordered Boxes)
-        Canvas(
+        // 今天列：仅保留淡底高亮（去掉边框）
+        if (highlightedDayIndex != null) {
+            val fillColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.08f)
+
+            Box(
+                modifier = Modifier
+                    .absoluteOffset(x = dayWidth * highlightedDayIndex)
+                    .width(dayWidth)
+                    .height(cellHeight * 12)
+                    .background(fillColor)
+            )
+        }
+
+        GridBackground(
+            gridLineColor = gridLineColor,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(cellHeight * 12)
-        ) {
-            val stroke = 0.5.dp.toPx()
-            val w = size.width
-            val h = size.height
+        )
 
-            // horizontal lines
-            val rowH = h / 12f
-            for (i in 0..12) {
-                val y = rowH * i
-                drawLine(
-                    color = gridLineColor,
-                    start = Offset(0f, y),
-                    end = Offset(w, y),
-                    strokeWidth = stroke
+        val courseBounds = remember(schedules, dayWidth, cellHeight) {
+            schedules.map { course ->
+                val xOffset = dayWidth * (course.dayOfWeek - 1)
+                val yOffset = cellHeight * (course.startNode - 1)
+                val cardHeight = cellHeight * course.step
+
+                val bounds = Rect(
+                    left = xOffset.value,
+                    top = yOffset.value,
+                    right = (xOffset + dayWidth).value,
+                    bottom = (yOffset + cardHeight).value
                 )
-            }
-            // vertical lines (7 days)
-            val colW = w / 7f
-            for (i in 0..7) {
-                val x = colW * i
-                drawLine(
-                    color = gridLineColor,
-                    start = Offset(x, 0f),
-                    end = Offset(x, h),
-                    strokeWidth = stroke
+
+                CourseLayout(
+                    course = course,
+                    xOffset = xOffset,
+                    yOffset = yOffset,
+                    cardHeight = cardHeight,
+                    bounds = bounds
                 )
             }
         }
 
-        schedules.forEach { course ->
-            val xOffset = dayWidth * (course.dayOfWeek - 1)
-            val yOffset = cellHeight * (course.startNode - 1)
-            val cardHeight = cellHeight * course.step
-
+        courseBounds.forEach { item ->
             CourseCard(
-                course = course,
+                course = item.course,
                 modifier = Modifier
                     .width(dayWidth)
-                    .height(cardHeight)
-                    .absoluteOffset(x = xOffset, y = yOffset)
-                    .padding(1.dp)
+                    .height(item.cardHeight)
+                    .absoluteOffset(x = item.xOffset, y = item.yOffset)
+                    .padding(Dimens.dividerThickness),
+                onClick = { c, _ -> onCourseClick(c, item.bounds) }
             )
         }
     }
 }
 
+private data class CourseLayout(
+    val course: CourseSchedule,
+    val xOffset: androidx.compose.ui.unit.Dp,
+    val yOffset: androidx.compose.ui.unit.Dp,
+    val cardHeight: androidx.compose.ui.unit.Dp,
+    val bounds: Rect
+)
+
 @Composable
-fun CourseCard(
-    course: CourseSchedule,
+private fun GridBackground(
+    gridLineColor: Color,
     modifier: Modifier = Modifier
+) {
+    // Use drawWithCache so Path/metrics are only recalculated when size or inputs change.
+    Box(
+        modifier = modifier.drawWithCache {
+            val strokeWidth = 0.5.dp.toPx()
+            val w = size.width
+            val h = size.height
+            val rowH = h / 12f
+            val colW = w / 7f
+
+            onDrawBehind {
+                // horizontal lines
+                for (i in 0..12) {
+                    val y = rowH * i
+                    drawLine(
+                        color = gridLineColor,
+                        start = Offset(0f, y),
+                        end = Offset(w, y),
+                        strokeWidth = strokeWidth
+                    )
+                }
+                // vertical lines
+                for (i in 0..7) {
+                    val x = colW * i
+                    drawLine(
+                        color = gridLineColor,
+                        start = Offset(x, 0f),
+                        end = Offset(x, h),
+                        strokeWidth = strokeWidth
+                    )
+                }
+            }
+        }
+    )
+}
+
+@Composable
+internal fun CourseCard(
+    course: CourseSchedule,
+    modifier: Modifier = Modifier,
+    onClick: (CourseSchedule, LayoutCoordinates?) -> Unit = { _, _ -> }
 ) {
     // 根据 colorIndex 取色
     val bgColor = CoursePalettes.Macaron.getOrElse(course.colorIndex) { Color.Gray }
@@ -450,34 +628,45 @@ fun CourseCard(
     // 用亮度做一个确定性选择：浅色底 -> 黑字；深色底 -> 白字。
     val textColor = if (bgColor.luminance() > 0.6f) Color(0xFF111111) else Color.White
 
+    // C: 固定使用更小的教室字号，避免每张卡片测量宽度并写入状态导致的额外重组/卡顿。
+    // 在 labelSmall 基础上再小一点点。
+    val roomBaseStyle = MaterialTheme.typography.labelSmall
+    val roomStyleToUse = remember(roomBaseStyle) {
+        val newSize = (roomBaseStyle.fontSize.value - 1f).coerceAtLeast(9f)
+        roomBaseStyle.copy(fontSize = newSize.sp)
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
             .clip(RoundedCornerShape(6.dp))
             .background(bgColor)
-            .padding(2.dp),
+            .clickable {
+                onClick(course, null)
+            }
+            .padding(Dimens.tiny),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
             text = course.courseName,
-            fontSize = ScheduleDimens.CourseCardFontSize,
+            style = MaterialTheme.typography.bodyMedium,
             color = textColor,
-            fontWeight = FontWeight.Bold,
             maxLines = 3,
             overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.Center,
-            lineHeight = 12.sp
+            textAlign = TextAlign.Center
         )
 
-        Spacer(modifier = Modifier.height(2.dp))
+        Spacer(modifier = Modifier.height(Dimens.textSpacing))
 
         Text(
-            text = course.room.replace("教学楼", ""), // 简单去重，让显示更短
-            fontSize = ScheduleDimens.RoomFontSize,
+            text = course.room.replace(" 教学楼", ""), // 简单去重，让显示更短
+            style = roomStyleToUse,
             color = textColor.copy(alpha = 0.9f),
             textAlign = TextAlign.Center,
-            maxLines = 1
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier
         )
     }
 }
