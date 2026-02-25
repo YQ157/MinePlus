@@ -61,6 +61,19 @@ fun MainScreen(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
+    val navigateToMainTab: (String) -> Unit = remember(navController, currentRoute) {
+        { route: String ->
+            if (currentRoute == route) return@remember
+            navController.navigate(route) {
+                popUpTo(navController.graph.findStartDestination().id) {
+                    saveState = true
+                }
+                launchSingleTop = true
+                restoreState = true
+            }
+        }
+    }
+
     // App 进入主界面后就提前预热“周课表”，避免第一次点开才触发 Room 冷启动。
     // 放在这里比放在 ScheduleScreen 更早，但仍然已经过了 Splash/Login 的关键路径。
     val scheduleViewModel: ScheduleViewModel = hiltViewModel()
@@ -75,15 +88,7 @@ fun MainScreen(
                     val selected = currentRoute == item.route
                     NavigationBarItem(
                         selected = selected,
-                        onClick = {
-                            navController.navigate(item.route) {
-                                popUpTo(navController.graph.findStartDestination().id) {
-                                    saveState = true
-                                }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        },
+                        onClick = { navigateToMainTab(item.route) },
                         icon = item.icon,
                         label = { Text(item.label) }
                     )
@@ -108,12 +113,7 @@ fun MainScreen(
             ) {
                 composable(MainRoutes.Today) {
                     TodayScheduleScreen(
-                        onNavigateToWeek = {
-                            navController.navigate(MainRoutes.Week) {
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        },
+                        onNavigateToWeek = { navigateToMainTab(MainRoutes.Week) },
                         onNavigateToAbout = onNavigateToAbout,
                         onRelogin = onNavigateToLogin
                     )

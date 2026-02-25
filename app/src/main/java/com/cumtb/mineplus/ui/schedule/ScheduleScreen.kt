@@ -1,5 +1,6 @@
 package com.cumtb.mineplus.ui.schedule
 
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -45,6 +46,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
@@ -159,6 +161,19 @@ fun ScheduleScreen(
             }
     }
 
+    val context = LocalContext.current
+
+    LaunchedEffect(Unit) {
+        viewModel.events.collect { event ->
+            when (event) {
+                is ScheduleViewModel.UiEvent.RefreshFailed -> {
+                    Toast.makeText(context, event.message, Toast.LENGTH_SHORT).show()
+                }
+                else -> Unit
+            }
+        }
+    }
+
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
@@ -251,7 +266,7 @@ fun ScheduleScreen(
                     actionIconContentColor = MaterialTheme.colorScheme.onBackground
                 )
             )
-        }
+        },
     ) { innerPadding ->
         Box(
             modifier = Modifier
@@ -278,8 +293,8 @@ fun ScheduleScreen(
 
             // 触发刷新：当手势进入 refreshing 状态
             if (pullState.isRefreshing && !isLoading) {
-                LaunchedEffect(Unit) {
-                    viewModel.onRefreshTriggered()
+                LaunchedEffect(pullState.isRefreshing) {
+                    viewModel.onRefreshTriggered(ScheduleViewModel.RefreshSource.User)
                 }
             }
 

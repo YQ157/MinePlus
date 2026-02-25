@@ -59,7 +59,7 @@ fun LoginScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Text(text = "Mine+ 登录", style = MaterialTheme.typography.headlineMedium)
+            Text(text = "Mine+", style = MaterialTheme.typography.headlineMedium)
 
             Spacer(modifier = Modifier.height(Dimens.medium2))
 

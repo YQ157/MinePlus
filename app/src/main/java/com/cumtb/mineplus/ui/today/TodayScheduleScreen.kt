@@ -1,14 +1,17 @@
 package com.cumtb.mineplus.ui.today
 
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -38,12 +41,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.cumtb.mineplus.data.model.CourseSchedule
 import com.cumtb.mineplus.ui.today.components.TodayCourseCard
+import java.time.LocalTime
+import com.cumtb.mineplus.util.computeTodayCourseTimeStatuses
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -55,6 +63,20 @@ fun TodayScheduleScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val pullState = rememberPullToRefreshState()
+
+    val context = LocalContext.current
+
+    // 仅失败提示：Toast
+    LaunchedEffect(Unit) {
+        viewModel.events.collect { event ->
+            when (event) {
+                is TodayScheduleViewModel.UiEvent.RefreshFailed -> {
+                    Toast.makeText(context, event.message, Toast.LENGTH_SHORT).show()
+                }
+                else -> Unit
+            }
+        }
+    }
 
     LaunchedEffect(uiState.isLoading) {
         if (!uiState.isLoading) pullState.endRefresh()
@@ -128,6 +150,7 @@ fun TodayScheduleScreen(
                 .background(MaterialTheme.colorScheme.background)
                 .nestedScroll(pullState.nestedScrollConnection)
                 .padding(horizontal = 12.dp)
+                .clipToBounds()
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 // 顶部标题已移到 TopAppBar，内容从列表开始。
@@ -150,21 +173,28 @@ fun TodayScheduleScreen(
                     }
 
                     else -> {
-                        TodayCourseList(courses = uiState.courses)
+                        TodayCourseList(courses = uiState.courses, now = uiState.now.toLocalTime())
                     }
                 }
             }
 
             if (pullState.isRefreshing && !uiState.isLoading) {
-                LaunchedEffect(Unit) {
-                    viewModel.onRefresh()
+                // 用 refreshing 作为 key，避免因重组多次启动同一个 Unit effect
+                LaunchedEffect(pullState.isRefreshing) {
+                    viewModel.onRefreshTriggered(TodayScheduleViewModel.RefreshSource.User)
                 }
             }
 
             PullToRefreshContainer(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .padding(top = 4.dp),
+                    // Move it up slightly so idle state won't peek.
+                    .layout { measurable, constraints ->
+                        val placeable = measurable.measure(constraints)
+                        layout(placeable.width, placeable.height) {
+                            placeable.placeRelative(0, (-placeable.height / 2))
+                        }
+                    },
                 state = pullState
             )
         }
@@ -172,13 +202,35 @@ fun TodayScheduleScreen(
 }
 
 @Composable
-private fun TodayCourseList(courses: List<CourseSchedule>) {
-    LazyColumn(
-        contentPadding = PaddingValues(bottom = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        items(items = courses, key = { it.id }) { course ->
-            TodayCourseCard(course = course)
+private fun TodayCourseList(courses: List<CourseSchedule>, now: LocalTime) {
+    val statuses = remember(courses, now) {
+        computeTodayCourseTimeStatuses(
+            now = now,
+            courses = courses.map { it.rawStartTime to it.rawEndTime }
+        )
+    }
+
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val minBlankSpace = this.maxHeight
+
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            items(
+                items = courses.withIndex().toList(),
+                key = { it.value.id }
+            ) { indexed ->
+                val idx = indexed.index
+                val course = indexed.value
+                val status = statuses.getOrNull(idx) ?: com.cumtb.mineplus.util.CourseTimeStatus.UNKNOWN
+                TodayCourseCard(course = course, status = status)
+            }
+
+            item(key = "bottom_filler") {
+                Spacer(modifier = Modifier.height(minBlankSpace))
+            }
         }
     }
 }

@@ -18,6 +18,13 @@ import kotlinx.coroutines.Dispatchers
 import javax.inject.Inject
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import java.io.IOException
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
@@ -120,19 +127,54 @@ class ScheduleViewModel @Inject constructor(
         _selectedWeek.value = week.coerceIn(1, max.coerceAtLeast(1))
     }
 
-    fun onRefreshTriggered() {
+    enum class RefreshSource {
+        User,
+        System
+    }
+
+    sealed interface UiEvent {
+        data object RefreshSuccess : UiEvent
+        data class RefreshFailed(val message: String) : UiEvent
+    }
+
+    private val _events = MutableSharedFlow<UiEvent>(
+        replay = 0,
+        extraBufferCapacity = 1,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
+    val events = _events.asSharedFlow()
+
+    fun onRefreshTriggered(source: RefreshSource = RefreshSource.User) {
         viewModelScope.launch {
+            // 双重保险：避免并发刷新导致重复请求/重复提示
+            if (_isLoading.value) return@launch
+
             _isLoading.value = true
             try {
                 repository.refreshAllData(onLoginSuccess = {})
-                // 刷新后可能当前周的数据变了，或者 maxWeek 变了，StateFlow 会自动通知 UI
                 Log.d("MinePlus", "刷新成功")
+                if (source == RefreshSource.User) {
+                    _events.tryEmit(UiEvent.RefreshSuccess)
+                }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.e("MinePlus", "刷新失败", e)
-                // 这里应该发射一个 error event 给 UI 显示 Toast，先略过
+                if (source == RefreshSource.User) {
+                    _events.tryEmit(UiEvent.RefreshFailed(e.toUserRefreshMessage()))
+                }
             } finally {
                 _isLoading.value = false
             }
+        }
+    }
+
+    private fun Throwable.toUserRefreshMessage(): String {
+        return when (this) {
+            is UnknownHostException -> "网络不可用，请检查网络后重试"
+            is SocketTimeoutException -> "网络连接超时，请稍后重试"
+            is IOException -> "网络异常，请稍后重试"
+            else -> "刷新失败，请稍后重试"
         }
     }
 
