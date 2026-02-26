@@ -77,7 +77,13 @@ fun TodayScheduleScreen(
     val context = LocalContext.current
 
     // Bump this when the user triggers a pull-to-refresh so the empty-state random label can re-roll.
+    // 使用LaunchedEffect监听刷新状态变化，避免频繁重组
     var refreshNonce by remember { mutableStateOf(0) }
+    var hasRefreshed by remember { mutableStateOf(false) }
+    
+    // 添加防抖处理，确保文案只刷新一次
+    var lastRefreshTime by remember { mutableStateOf(0L) }
+    val refreshDebounceDelay = 300L // 300ms防抖延迟
 
     // 仅失败提示：Toast
     LaunchedEffect(Unit) {
@@ -202,16 +208,18 @@ fun TodayScheduleScreen(
                             title = "还没有课表数据",
                             actionText = "重新登录",
                             onAction = onRelogin,
-                            refreshNonce = refreshNonce
+                            refreshNonce = refreshNonce,
+                            vacationDaysLeft = uiState.vacationDaysLeft
                         )
                     }
-
+                
                     uiState.courses.isEmpty() -> {
                         TodayEmptyStateScrollHost(
-                            title = "", // 不显示“今天没有课”这行副标题
+                            title = "", // 不显示"今天没有课"这行副标题
                             actionText = "查看周课表",
                             onAction = onNavigateToWeek,
-                            refreshNonce = refreshNonce
+                            refreshNonce = refreshNonce,
+                            vacationDaysLeft = uiState.vacationDaysLeft
                         )
                     }
 
@@ -221,12 +229,25 @@ fun TodayScheduleScreen(
                 }
             }
 
-            if (pullState.isRefreshing && !uiState.isLoading) {
+            if (pullState.isRefreshing && !uiState.isLoading && !hasRefreshed) {
                 // 用 refreshing 作为 key，避免因重组多次启动同一个 Unit effect
                 LaunchedEffect(pullState.isRefreshing) {
-                    // User explicitly started a refresh gesture: re-roll the empty-state random message.
-                    refreshNonce++
-                    viewModel.onRefreshTriggered(TodayScheduleViewModel.RefreshSource.User)
+                    val currentTime = System.currentTimeMillis()
+                    // 防抖处理：避免短时间内重复刷新
+                    if (currentTime - lastRefreshTime > refreshDebounceDelay) {
+                        // User explicitly started a refresh gesture: re-roll the empty-state random message.
+                        refreshNonce++
+                        hasRefreshed = true
+                        lastRefreshTime = currentTime
+                        viewModel.onRefreshTriggered(TodayScheduleViewModel.RefreshSource.User)
+                    }
+                }
+            }
+            
+            // 当刷新结束时重置标志位
+            LaunchedEffect(uiState.isLoading) {
+                if (!uiState.isLoading) {
+                    hasRefreshed = false
                 }
             }
 
@@ -280,15 +301,53 @@ private fun TodayCourseList(courses: List<CourseSchedule>, now: LocalTime) {
     }
 }
 
-// 无课状态的文案数组
-private val NO_CLASS_MESSAGES = listOf(
-    "今日无课，合法摸鱼 🎣",
-    "难得空闲，去吃点什么呢？ 🍜",
-    "难得的空闲，把时间还给自己 ⏳",
-    "今日无课，宜：发呆、晒太阳 ☀️",
-    "系统建议立即启动\"躺平\"模式 🛌",
-    "今日无课，要不要去图书馆？ 📚",
-    "自由时间已到账 💰"
+// 假期倒计时文案配置
+private data class VacationMessage(
+    val condition: (Long) -> Boolean,
+    val messages: List<String>
+)
+
+private val VACATION_MESSAGES = listOf(
+    // 开学当天且没课的情况
+    VacationMessage(
+        condition = { days -> days == 0L },
+        messages = listOf(
+            "今天开学啦！新学期加油💪",
+            "报道日快乐！新旅程开始啦～",
+            "开学第一天，元气满满冲鸭！🚀",
+            "Welcome back! 新学期请指教✨"
+        )
+    ),
+    // 快开学了 (1-7天)
+    VacationMessage(
+        condition = { days -> days in 1..7 },
+        messages = listOf(
+            "天哪！{days}天后就要开学了😱",
+            "只剩{days}天了，是不是有点紧张？",
+            "开学{days}天倒计时，快收拾行李了！",
+            "最后{days}天自由时光，要好好珍惜呀～"
+        )
+    ),
+    // 中等距离 (7-15天)
+    VacationMessage(
+        condition = { days -> days in 8..15 },
+        messages = listOf(
+            "假期只剩{days}天了，抓紧时间放松！",
+            "开学倒计时{days}天，准备迎接新学期✨",
+            "还有{days}天就要开学了，珍惜当下时光",
+            "{days}天后开启新篇章，有点小期待呢～"
+        )
+    ),
+    // 距离开学还很远 (>15天)
+    VacationMessage(
+        condition = { days -> days > 15 },
+        messages = listOf(
+            "悠长假期还有{days}天，慢慢享受吧～",
+            "距离开学还早着呢，{days}天的自由时光！",
+            "还有{days}天才开学，假期余额充足😄",
+            "超长待机假期{days}天，想干嘛就干嘛！"
+        )
+    )
 )
 
 @Composable
@@ -296,11 +355,31 @@ private fun TodayEmptyState(
     title: String,
     actionText: String,
     onAction: () -> Unit,
-    refreshNonce: Int
+    refreshNonce: Int,
+    vacationDaysLeft: Long?
 ) {
-    // 随机选择一条文案
-    val randomMessage = remember(title, refreshNonce) {
-        NO_CLASS_MESSAGES.random(Random(System.currentTimeMillis()))
+    // 根据假期天数选择合适的文案
+    val countdownMessage = remember(vacationDaysLeft, refreshNonce) {
+        if (vacationDaysLeft == null) {
+            // 如果没有开学日期信息，使用默认文案
+            listOf(
+                "今日无课，合法摸鱼 🎣",
+                "难得空闲，去吃点什么呢？ 🍜",
+                "难得的空闲，把时间还给自己 ⏳",
+                "今日无课，宜：发呆、晒太阳 ☀️",
+                "系统建议立即启动\"躺平\"模式 🛌",
+                "今日无课，要不要去图书馆？ 📚",
+                "自由时间已到账 💰"
+            ).random(Random(System.currentTimeMillis()))
+        } else {
+            // 根据天数选择对应的文案组
+            val messageGroup = VACATION_MESSAGES.find { it.condition(vacationDaysLeft) }
+                ?: VACATION_MESSAGES.last() // 默认使用最后一个（最长假期）
+            
+            // 选择随机文案并替换占位符
+            val template = messageGroup.messages.random(Random(System.currentTimeMillis()))
+            template.replace("{days}", vacationDaysLeft.toString())
+        }
     }
 
     var isPressed by remember { mutableStateOf(false) }
@@ -317,9 +396,9 @@ private fun TodayEmptyState(
                 // 注意：不要在 LazyColumn 的 item 里再用 fillMaxHeight()，否则会把 item 撑到异常尺寸，影响视觉居中
                 .padding(horizontal = 24.dp)
         ) {
-            // 主标题（随机标签）
+            // 主标题（倒计时文案）
             Text(
-                text = randomMessage,
+                text = countdownMessage,
                 style = MaterialTheme.typography.headlineSmall.copy(
                     fontSize = 21.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -435,7 +514,8 @@ private fun TodayEmptyStateScrollHost(
     title: String,
     actionText: String,
     onAction: () -> Unit,
-    refreshNonce: Int
+    refreshNonce: Int,
+    vacationDaysLeft: Long?
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
         val minBlankSpace = 200.dp  // 固定值替代maxHeight
@@ -455,7 +535,8 @@ private fun TodayEmptyStateScrollHost(
                         title = title,
                         actionText = actionText,
                         onAction = onAction,
-                        refreshNonce = refreshNonce
+                        refreshNonce = refreshNonce,
+                        vacationDaysLeft = vacationDaysLeft
                     )
                 }
             }

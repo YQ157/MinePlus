@@ -33,6 +33,7 @@ import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
+import kotlin.random.Random
 import javax.inject.Inject
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -50,7 +51,9 @@ class TodayScheduleViewModel @Inject constructor(
         /** 没有任何课表数据/学期信息（迭代1用于提示“重新登录”） */
         val hasNoData: Boolean,
         /** 用于在 UI 层推导“进行中/即将开始”等时间状态；通过 ticker 自动刷新 */
-        val now: LocalDateTime
+        val now: LocalDateTime,
+        /** 假期剩余天数，用于显示倒计时文案 */
+        val vacationDaysLeft: Long?
     )
 
     private val semesterStartDateFlow: StateFlow<LocalDate?> = prefs.semesterStartDate
@@ -122,6 +125,13 @@ class TodayScheduleViewModel @Inject constructor(
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
+    /** 假期剩余天数计算 */
+    private val vacationDaysLeftFlow: StateFlow<Long?> = combine(semesterStartDateFlow, todayFlow) { start, today ->
+        if (start == null) return@combine null
+        val daysDiff = ChronoUnit.DAYS.between(today, start)
+        daysDiff
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
     /** Persisted course card palette id, shared with Schedule screen. */
     val coursePaletteId: StateFlow<CoursePalettes.PaletteId> = prefs.coursePaletteId
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), CoursePalettes.defaultPaletteId)
@@ -131,14 +141,22 @@ class TodayScheduleViewModel @Inject constructor(
         semesterStartDateFlow,
         todayCoursesFlow,
         nowFlow,
-        titleFlow
-    ) { loading, startDate, coursesOrNull, now, title ->
-        val courses = coursesOrNull ?: emptyList()
+        titleFlow,
+        vacationDaysLeftFlow
+    ) { values ->
+        val loading = values[0] as Boolean
+        val startDate = values[1] as LocalDate?
+        val coursesOrNull = values[2] as List<CourseSchedule>?
+        val now = values[3] as LocalDateTime
+        val title = values[4] as String
+        val vacationDaysLeft = values[5] as Long?
+        
+        val courses = coursesOrNull ?: emptyList<CourseSchedule>()
 
         // Lightweight debug log when key pieces change.
         Log.d(
             "MinePlus",
-            "TodayUiState: loading=$loading, hasStartDate=${startDate != null}, title=$title, courses=${courses.size}, now=$now"
+            "TodayUiState: loading=$loading, hasStartDate=${startDate != null}, title=$title, courses=${courses.size}, now=$now, vacationDaysLeft=$vacationDaysLeft"
         )
 
         UiState(
@@ -146,7 +164,8 @@ class TodayScheduleViewModel @Inject constructor(
             courses = courses,
             isLoading = loading,
             hasNoData = startDate == null,
-            now = now
+            now = now,
+            vacationDaysLeft = vacationDaysLeft
         )
     }.stateIn(
         viewModelScope,
@@ -156,7 +175,8 @@ class TodayScheduleViewModel @Inject constructor(
             courses = emptyList(),
             isLoading = false,
             hasNoData = true,
-            now = LocalDateTime.now(clock)
+            now = LocalDateTime.now(clock),
+            vacationDaysLeft = null
         )
     )
 
