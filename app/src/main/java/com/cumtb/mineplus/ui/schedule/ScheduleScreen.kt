@@ -12,6 +12,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -259,12 +260,19 @@ fun ScheduleScreen(
                         )
                     }
                 },
-                // Match Today screen: white/neutral top bar.
+                // Match Today screen: white/neutral top bar with top divider.
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background,
                     titleContentColor = MaterialTheme.colorScheme.onBackground,
                     actionIconContentColor = MaterialTheme.colorScheme.onBackground
                 )
+            )
+            
+            // 添加顶部极细分割线
+            HorizontalDivider(
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
+                thickness = 0.5.dp
             )
         },
     ) { innerPadding ->

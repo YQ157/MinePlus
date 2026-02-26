@@ -174,7 +174,7 @@ class ScheduleViewModel @Inject constructor(
             is UnknownHostException -> "网络不可用，请检查网络后重试"
             is SocketTimeoutException -> "网络连接超时，请稍后重试"
             is IOException -> "网络异常，请稍后重试"
-            else -> "刷新失败，请稍后重试"
+            else -> "刷新失败，请重新登录"
         }
     }
 

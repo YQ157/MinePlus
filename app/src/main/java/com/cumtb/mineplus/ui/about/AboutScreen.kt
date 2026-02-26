@@ -3,6 +3,7 @@ package com.cumtb.mineplus.ui.about
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
@@ -10,6 +11,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
@@ -38,8 +40,15 @@ fun AboutScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
+                    containerColor = MaterialTheme.colorScheme.background
                 )
+            )
+            
+            // 添加顶部极细分割线
+            HorizontalDivider(
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
+                thickness = 0.5.dp
             )
         }
     ) { innerPadding ->
