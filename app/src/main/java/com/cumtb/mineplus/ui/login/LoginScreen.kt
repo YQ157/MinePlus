@@ -172,6 +172,14 @@ fun LoginScreen(
                                 username = ""
                                 password = ""
                             }
+                            
+                            // ✅ 新增：强制刷新 Cookie 到磁盘确保持久化
+                            try {
+                                android.webkit.CookieManager.getInstance().flush()
+                                Log.d("LoginScreen", "🔄 Cookie 已强制刷新到磁盘")
+                            } catch (e: Exception) {
+                                Log.e("LoginScreen", "❌ Cookie 刷新失败", e)
+                            }
                         }
 
                         webLoginMode = WebLoginMode.Hidden
