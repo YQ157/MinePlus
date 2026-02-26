@@ -101,7 +101,7 @@ fun ScheduleScreen(
             .collect { page ->
                 val week = page + 1
                 if (week != selectedWeek) {
-                    viewModel.onWeekSelected(week)
+                    viewModel.onSelectedWeekChanged(week)
                 }
                 viewModel.prefetchWeeksAround(week)
             }
@@ -175,6 +175,9 @@ fun ScheduleScreen(
         }
     }
 
+    val selectedPaletteId by viewModel.coursePaletteId.collectAsState()
+    val coursePalette = remember(selectedPaletteId) { CoursePalettes.colorsFor(selectedPaletteId) }
+
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
@@ -234,6 +237,27 @@ fun ScheduleScreen(
                         expanded = menuExpanded,
                         onDismissRequest = { menuExpanded = false }
                     ) {
+                        // Course palette selector (English)
+                        CoursePalettes.PaletteId.entries.forEach { id ->
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        text = if (id == selectedPaletteId) "✓ ${id.englishName}" else id.englishName,
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    viewModel.onCoursePaletteSelected(id)
+                                }
+                            )
+                        }
+
+                        HorizontalDivider(
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
+                            thickness = 0.5.dp
+                        )
+
                         DropdownMenuItem(
                             text = { 
                                 Text(
@@ -295,7 +319,8 @@ fun ScheduleScreen(
                 ScheduleWeekPage(
                     week = week,
                     schedules = weekSchedules,
-                    semesterStartDate = semesterStartDate
+                    semesterStartDate = semesterStartDate,
+                    coursePalette = coursePalette
                 )
             }
 
@@ -318,7 +343,8 @@ fun ScheduleScreen(
 private fun ScheduleWeekPage(
     week: Int,
     schedules: List<CourseSchedule>,
-    semesterStartDate: LocalDate?
+    semesterStartDate: LocalDate?,
+    coursePalette: List<Color>
 ) {
     // 为每一周缓存一个竖向滚动位置，避免侧页首次出现时创建 ScrollState 引发抖动
     val sharedVScrollState: ScrollState = rememberSaveable(week, saver = ScrollState.Saver) {
@@ -367,6 +393,7 @@ private fun ScheduleWeekPage(
                         schedules = schedules,
                         scrollState = sharedVScrollState,
                         highlightedDayIndex = todayColumnIndex,
+                        coursePalette = coursePalette,
                         onCourseClick = { course, boundsInHost ->
                              expandedAnchor = if (expandedAnchor?.courseId == course.id) {
                                 null
@@ -384,7 +411,8 @@ private fun ScheduleWeekPage(
                         expandedAnchor = expandedAnchor,
                         viewportSize = overlayHostSize,
                         onDismissRequest = { expandedAnchor = null },
-                        modifier = Modifier.fillMaxSize()
+                        modifier = Modifier.fillMaxSize(),
+                        coursePalette = coursePalette
                     )
                 }
             }
@@ -515,6 +543,7 @@ internal fun ScheduleContent(
     schedules: List<CourseSchedule>,
     scrollState: ScrollState,
     highlightedDayIndex: Int?,
+    coursePalette: List<Color>,
     onCourseClick: (CourseSchedule, Rect) -> Unit = { _, _ -> }
 ) {
     val gridLineColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
@@ -579,6 +608,7 @@ internal fun ScheduleContent(
         courseBounds.forEach { item ->
             CourseCard(
                 course = item.course,
+                coursePalette = coursePalette,
                 modifier = Modifier
                     .width(dayWidth)
                     .height(item.cardHeight)
@@ -641,11 +671,12 @@ private fun GridBackground(
 @Composable
 internal fun CourseCard(
     course: CourseSchedule,
+    coursePalette: List<Color>,
     modifier: Modifier = Modifier,
     onClick: (CourseSchedule, LayoutCoordinates?) -> Unit = { _, _ -> }
 ) {
     // 根据 colorIndex 取色
-    val bgColor = CoursePalettes.Macaron.getOrElse(course.colorIndex) { Color.Gray }
+    val bgColor = coursePalette.getOrElse(course.colorIndex) { Color.Gray }
 
     // 课程色板是“自定义色”，不在 Material colorScheme 里，contentColorFor() 推导不稳定。
     // 用亮度做一个确定性选择：浅色底 -> 黑字；深色底 -> 白字。

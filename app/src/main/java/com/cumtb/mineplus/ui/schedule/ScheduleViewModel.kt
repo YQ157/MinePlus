@@ -7,6 +7,7 @@ import com.cumtb.mineplus.data.database.CourseDao
 import com.cumtb.mineplus.data.model.CourseSchedule
 import com.cumtb.mineplus.data.preference.AppPreferences
 import com.cumtb.mineplus.data.repository.CourseRepository
+import com.cumtb.mineplus.ui.theme.CoursePalettes
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -49,50 +50,7 @@ class ScheduleViewModel @Inject constructor(
     val isLoading = _isLoading.asStateFlow()
 
     // 4. 核心数据流：当 selectedWeek 变化时，自动去数据库查课
-//    val scheduleFlow: StateFlow<List<CourseSchedule>> = MutableStateFlow(
-//        listOf(
-//            // 1. 周一 第1-2节 (高数) - 红色
-//            CourseSchedule(
-//                id = 1, dayOfWeek = 1, startNode = 1, step = 2,
-//                room = "教1-201", rawStartTime = "08:00", rawEndTime = "09:35", date = "",
-//                courseName = "高等数学A(1)", teacher = "张三", colorIndex = 0
-//            ),
-//            // 2. 周一 第3-4节 (大英) - 紫色
-//            CourseSchedule(
-//                id = 2, dayOfWeek = 1, startNode = 3, step = 2,
-//                room = "教3-405", rawStartTime = "10:05", rawEndTime = "11:40", date = "",
-//                courseName = "大学英语(3)", teacher = "李四", colorIndex = 1
-//            ),
-//            // 3. 周二 第3-5节 (实验课，跨3节) - 蓝色
-//            CourseSchedule(
-//                id = 3, dayOfWeek = 2, startNode = 3, step = 3,
-//                room = "机房B", rawStartTime = "10:05", rawEndTime = "12:30", date = "",
-//                courseName = "Python程序设计实验", teacher = "王五", colorIndex = 3
-//            ),
-//            // 4. 周三 第1-2节 (体育) - 绿色
-//            CourseSchedule(
-//                id = 4, dayOfWeek = 3, startNode = 1, step = 2,
-//                room = "田径场", rawStartTime = "08:00", rawEndTime = "09:35", date = "",
-//                courseName = "体育(篮球)", teacher = "赵六", colorIndex = 6
-//            ),
-//            // 5. 周五 第6-9节 (超长课) - 橙色
-//            CourseSchedule(
-//                id = 5, dayOfWeek = 5, startNode = 6, step = 4,
-//                room = "教4-101", rawStartTime = "14:00", rawEndTime = "17:30", date = "",
-//                courseName = "毛泽东思想和中国特色社会主义理论体系概论", teacher = "钱七", colorIndex = 11
-//            )
-//        )
-//    ).asStateFlow()
-//    @OptIn(ExperimentalCoroutinesApi::class)
-    val scheduleFlow: StateFlow<List<CourseSchedule>> = _selectedWeek
-        .flatMapLatest { week ->
-            courseDao.getSchedulesByWeek(week)
-        }
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = emptyList()
-        )
+    // NOTE: legacy scheduleFlow is no longer used; ScheduleScreen uses schedulesByWeek aggregation.
 
     /** 学期开始日期（ISO-8601 字符串解析为 LocalDate），用于 UI 渲染表头日期 */
     val semesterStartDate: StateFlow<LocalDate?> = prefs.semesterStartDate
@@ -106,30 +64,10 @@ class ScheduleViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-    // 5. 表头日期流 (Mon 1/19, Tue 1/20...)
-    // 直接用“学期开始日期 + selectedWeek”来算，不再依赖 DB 里某节课的 date，避免周切换时表头跟着数据抖动。
-    // 约定：semesterStartDate 是“第 1 周的周一”。
-    val weekDates: StateFlow<List<LocalDate>> = combine(_selectedWeek, semesterStartDate) { week, start ->
-        if (start == null) return@combine emptyList()
-        val monday = start.plusDays(((week - 1).coerceAtLeast(0) * 7L))
-        List(7) { i -> monday.plusDays(i.toLong()) }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
-
-    init {
-        // 🚀 启动时，监听 DataStore 自动计算当前周
-        observeSemesterInfo()
-    }
-
-    // --- 用户意图 (Actions) ---
-
-    fun onWeekSelected(week: Int) {
-        val max = _maxWeek.value
-        _selectedWeek.value = week.coerceIn(1, max.coerceAtLeast(1))
-    }
+    // NOTE: legacy weekDates is no longer used.
 
     enum class RefreshSource {
-        User,
-        System
+        User
     }
 
     sealed interface UiEvent {
@@ -202,6 +140,20 @@ class ScheduleViewModel @Inject constructor(
             }.collect()
         }
     }
+
+    /** UI 选周入口：统一做边界保护。 */
+    fun onWeekSelected(week: Int) {
+        val max = _maxWeek.value.coerceAtLeast(1)
+        _selectedWeek.value = week.coerceIn(1, max)
+    }
+
+    /** ScheduleScreen 调用入口：避免符号缓存导致的 onWeekSelected 解析异常。 */
+    fun onSelectedWeekChanged(week: Int) {
+        onWeekSelected(week)
+    }
+
+    /** UI 声明“当前需要的周集合”（通常 prev/current/next）。 */
+    private val activeWeeks = MutableStateFlow<Set<Int>>(emptySet())
 
     // --- 按周热缓存（用于 pager 相邻页丝滑露出） ---
     private val weekStateCache = mutableMapOf<Int, StateFlow<List<CourseSchedule>>>()
@@ -277,24 +229,7 @@ class ScheduleViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Provide a cold Flow for schedules of a specific week.
-     * Used by the pager to prefetch prev/next week to avoid a DB query when the page is first revealed.
-     */
-    fun schedulesForWeekFlow(week: Int): Flow<List<CourseSchedule>> {
-        val safeWeek = week.coerceAtLeast(1)
-        return courseDao.getSchedulesByWeek(safeWeek)
-    }
-
-    // --- 屏幕级按周聚合缓存 ---
-    // UI 声明“当前需要的周集合”（通常 prev/current/next），VM 负责：
-    // 1) IO/Default 线程拉取/去重/排序
-    // 2) 汇总为 Map<week, schedules>
-    // 3) 用 StateFlow 推给 UI（UI 只 collect 一次，pager item O(1) 查表）
-    private val activeWeeks = MutableStateFlow<Set<Int>>(emptySet())
-
-    /**
-     * VM 输出：当前激活周的课表 Map。
+    /** VM 输出：当前激活周的课表 Map。
      * 注意：CourseSchedule 本身没有 week 字段，所以这里基于 DAO 的 getSchedulesByWeek(week) 聚合。
      */
     val schedulesByWeek: StateFlow<Map<Int, List<CourseSchedule>>> =
@@ -381,5 +316,19 @@ class ScheduleViewModel @Inject constructor(
                 )
             )
         }
+    }
+
+    /** Persisted course card palette (used by CourseCard/Course overlay). */
+    val coursePaletteId: StateFlow<CoursePalettes.PaletteId> = prefs.coursePaletteId
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), CoursePalettes.defaultPaletteId)
+
+    fun onCoursePaletteSelected(id: CoursePalettes.PaletteId) {
+        viewModelScope.launch {
+            prefs.setCoursePaletteId(id)
+        }
+    }
+
+    init {
+        observeSemesterInfo()
     }
 }

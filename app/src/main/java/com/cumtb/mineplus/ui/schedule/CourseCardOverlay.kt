@@ -64,6 +64,7 @@ internal fun CourseOverlayHost(
     expandedAnchor: CourseOverlayAnchor?,
     viewportSize: IntSize?,
     modifier: Modifier = Modifier,
+    coursePalette: List<Color>,
     onDismissRequest: () -> Unit
 ) {
     // Transparent full-screen click layer (no gray scrim), to dismiss when tapping outside.
@@ -90,7 +91,8 @@ internal fun CourseOverlayHost(
     if (expandedAnchor != null) {
         CourseExpandedPopupInWindow(
             anchor = expandedAnchor,
-            viewportSize = viewportSize
+            viewportSize = viewportSize,
+            coursePalette = coursePalette
         )
     }
 }
@@ -98,7 +100,8 @@ internal fun CourseOverlayHost(
 @Composable
 private fun CourseExpandedPopupInWindow(
     anchor: CourseOverlayAnchor,
-    viewportSize: IntSize?
+    viewportSize: IntSize?,
+    coursePalette: List<Color>
 ) {
     val density = LocalDensity.current
     val layoutDirection = LocalLayoutDirection.current
@@ -117,7 +120,7 @@ private fun CourseExpandedPopupInWindow(
     val viewportWidthPx = viewportSize?.width?.toFloat() ?: 0f
     val viewportHeightPx = viewportSize?.height?.toFloat() ?: 0f
 
-    val bgColor = CoursePalettes.Macaron.getOrElse(anchor.course.colorIndex) { Color.Gray }
+    val bgColor = coursePalette.getOrElse(anchor.course.colorIndex) { Color.Gray }
     val textColor = if (bgColor.luminance() > 0.6f) Color(0xFF111111) else Color.White
 
     // Safety: if we don't know viewport yet, show centered popup.

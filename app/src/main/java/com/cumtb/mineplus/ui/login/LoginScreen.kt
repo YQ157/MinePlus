@@ -59,7 +59,7 @@ fun LoginScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Text(text = "Mine+", style = MaterialTheme.typography.headlineMedium)
+            Text(text = "Mine+", style = MaterialTheme.typography.headlineLarge)
 
             Spacer(modifier = Modifier.height(Dimens.medium2))
 
@@ -150,9 +150,6 @@ fun LoginScreen(
                         scope.launch {
                             when (successMode) {
                                 WebLoginMode.Auto -> {
-                                    // 输入框登录（自动注入）成功：
-                                    // - 勾选：保存用户名+密码
-                                    // - 不勾选：清除本地已保存凭据
                                     viewModel.persistCredentials(
                                         rememberPassword = rememberPassword,
                                         username = username,
@@ -161,9 +158,6 @@ fun LoginScreen(
                                 }
 
                                 WebLoginMode.Manual -> {
-                                    // 手动 WebView 登录成功：
-                                    // - 勾选：只保存用户名（不保存密码）
-                                    // - 不勾选：清除本地已保存凭据
                                     viewModel.persistUsernameOnlyWhenRememberEnabled(
                                         rememberPassword = rememberPassword,
                                         username = username
@@ -181,7 +175,9 @@ fun LoginScreen(
                         }
 
                         webLoginMode = WebLoginMode.Hidden
-                        viewModel.testFetchData(onLoginSuccess)
+
+                        // ✅ 改为：先进入主界面，再尝试后台拉取数据（失败也不闪退）
+                        viewModel.onLoginSuccessAndNavigate(onLoginSuccess)
                     },
                     onLoginFailed = { error ->
                         Log.e("SmartLogin", "☠️ 收到失败回调：$error")

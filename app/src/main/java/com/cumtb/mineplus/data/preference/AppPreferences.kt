@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
+import com.cumtb.mineplus.ui.theme.CoursePalettes
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -15,13 +16,16 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(na
 
 @Singleton
 class AppPreferences @Inject constructor(
-    @ApplicationContext private val context: Context
+    @param:ApplicationContext private val context: Context
 ) {
     // 定义 Keys
     companion object {
         val KEY_SEMESTER_START_DATE = stringPreferencesKey("semester_start_date")
         val KEY_TOTAL_WEEKS = intPreferencesKey("total_weeks")
         val KEY_REMEMBER_PASSWORD = booleanPreferencesKey("remember_password")
+
+        // Course card palette
+        val KEY_COURSE_PALETTE = stringPreferencesKey("course_palette")
     }
 
     // --- 读取数据 (Flow) ---
@@ -43,6 +47,12 @@ class AppPreferences @Inject constructor(
             preferences[KEY_REMEMBER_PASSWORD] ?: false
         }
 
+    /** Selected course palette id (persisted). Defaults to [CoursePalettes.defaultPaletteId]. */
+    val coursePaletteId: Flow<CoursePalettes.PaletteId> = context.dataStore.data
+        .map { preferences ->
+            CoursePalettes.paletteIdFromStorageKey(preferences[KEY_COURSE_PALETTE])
+        }
+
     // --- 写入数据 ---
 
     suspend fun saveSemesterInfo(startDate: String, totalWeeks: Int) {
@@ -55,6 +65,12 @@ class AppPreferences @Inject constructor(
     suspend fun setRememberPassword(remember: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[KEY_REMEMBER_PASSWORD] = remember
+        }
+    }
+
+    suspend fun setCoursePaletteId(id: CoursePalettes.PaletteId) {
+        context.dataStore.edit { preferences ->
+            preferences[KEY_COURSE_PALETTE] = id.storageKey
         }
     }
 }

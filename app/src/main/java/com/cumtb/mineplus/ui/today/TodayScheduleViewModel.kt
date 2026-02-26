@@ -7,9 +7,11 @@ import com.cumtb.mineplus.data.database.CourseDao
 import com.cumtb.mineplus.data.model.CourseSchedule
 import com.cumtb.mineplus.data.preference.AppPreferences
 import com.cumtb.mineplus.data.repository.CourseRepository
+import com.cumtb.mineplus.ui.theme.CoursePalettes
 import com.cumtb.mineplus.util.minuteAlignedTickerFlow
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -33,11 +35,12 @@ import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import javax.inject.Inject
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class TodayScheduleViewModel @Inject constructor(
     private val repository: CourseRepository,
     private val courseDao: CourseDao,
-    prefs: AppPreferences
+    private val prefs: AppPreferences
 ) : ViewModel() {
 
     data class UiState(
@@ -119,6 +122,10 @@ class TodayScheduleViewModel @Inject constructor(
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
+    /** Persisted course card palette id, shared with Schedule screen. */
+    val coursePaletteId: StateFlow<CoursePalettes.PaletteId> = prefs.coursePaletteId
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), CoursePalettes.defaultPaletteId)
+
     val uiState: StateFlow<UiState> = combine(
         isLoadingFlow,
         semesterStartDateFlow,
@@ -154,8 +161,7 @@ class TodayScheduleViewModel @Inject constructor(
     )
 
     enum class RefreshSource {
-        User,
-        System
+        User
     }
 
     sealed interface UiEvent {
@@ -210,4 +216,10 @@ class TodayScheduleViewModel @Inject constructor(
     /** @deprecated Use [onRefreshTriggered] to align with ScheduleScreen refresh semantics. */
     @Deprecated("Use onRefreshTriggered()", ReplaceWith("onRefreshTriggered()"))
     fun onRefresh() = onRefreshTriggered()
+
+    fun onCoursePaletteSelected(id: CoursePalettes.PaletteId) {
+        viewModelScope.launch {
+            prefs.setCoursePaletteId(id)
+        }
+    }
 }

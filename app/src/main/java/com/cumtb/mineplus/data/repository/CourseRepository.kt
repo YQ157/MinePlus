@@ -8,8 +8,11 @@ import com.cumtb.mineplus.data.database.ScheduleEntity
 import com.cumtb.mineplus.data.model.DatumRequest
 import com.cumtb.mineplus.data.preference.AppPreferences
 import com.cumtb.mineplus.data.scraper.HtmlParser
+import com.cumtb.mineplus.ui.theme.CoursePalettes
 import com.cumtb.mineplus.util.TimeMapper
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import javax.inject.Inject
@@ -85,9 +88,15 @@ class CourseRepository @Inject constructor(
             // 1. 🎨 颜色分配 (发牌算法)
             // 先按 ID 排序，保证每次分配的颜色一致
             val sortedLessonIds = lessonIds.sorted()
-            // 建立映射表: lessonId -> colorIndex (0~14)
+
+            // Use persisted palette size so colorIndex always fits current palette.
+            val paletteSize = prefs.coursePaletteId.map { id ->
+                CoursePalettes.colorsFor(id).size
+            }.first()
+
+            // 建立映射表: lessonId -> colorIndex
             val colorMap = sortedLessonIds.mapIndexed { index, id ->
-                id to (index % 15) // 假设我们有 15 种颜色
+                id to (index % paletteSize)
             }.toMap()
 
             // 2. 构建 CourseEntity 列表

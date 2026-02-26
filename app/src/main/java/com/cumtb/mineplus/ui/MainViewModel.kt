@@ -1,5 +1,6 @@
 package com.cumtb.mineplus.ui
 
+import android.util.Log
 import android.webkit.CookieManager
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -7,6 +8,7 @@ import com.cumtb.mineplus.data.preference.AppPreferences
 import com.cumtb.mineplus.data.preference.CredentialStorage
 import com.cumtb.mineplus.data.repository.CourseRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -63,6 +65,28 @@ class MainViewModel @Inject constructor(
             credentialStorage.saveUsernameOnly(username)
         } else {
             credentialStorage.clear()
+        }
+    }
+
+    /**
+     * 登录成功后触发：
+     * 1) 立即进入 MainScreen（哪怕后续拉取数据失败，也不闪退）
+     * 2) 后台尝试刷新课表数据；失败时仅记录日志，数据库保持为空/旧数据
+     */
+    fun onLoginSuccessAndNavigate(onNavigateToMain: () -> Unit) {
+        // 先导航，避免被网络/解析失败阻塞或导致崩溃
+        onNavigateToMain()
+
+        // 再后台拉取数据（best-effort）
+        viewModelScope.launch {
+            try {
+                repository.refreshAllData(onLoginSuccess = {})
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e("MinePlus", "❌ 登录后首次数据拉取失败（将进入主界面但数据为空）", e)
+                // swallow: do not crash
+            }
         }
     }
 

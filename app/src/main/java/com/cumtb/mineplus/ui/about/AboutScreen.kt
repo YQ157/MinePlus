@@ -58,15 +58,15 @@ fun AboutScreen(
                 .padding(innerPadding)
                 .padding(Dimens.screenPaddingCompact)
         ) {
-            Text(text = "MinePlus", style = MaterialTheme.typography.headlineSmall)
+            Text(text = "Mine+", style = MaterialTheme.typography.headlineSmall)
             Spacer(modifier = Modifier.height(Dimens.tiny2))
             Text(
-                text = "一个更好用的课程表助手。",
+                text = "一款简单的教务助手。",
                 style = MaterialTheme.typography.bodyLarge
             )
             Spacer(modifier = Modifier.height(Dimens.elementSpacing))
             Text(
-                text = "提示：此页可扩展为版本号、更新日志、开源协议等。",
+                text = "此页将扩展为版本号、更新日志、开源协议等。",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

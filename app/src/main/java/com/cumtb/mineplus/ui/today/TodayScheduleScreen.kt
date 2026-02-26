@@ -46,7 +46,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
@@ -61,6 +60,7 @@ import com.cumtb.mineplus.data.model.CourseSchedule
 import com.cumtb.mineplus.ui.today.components.TodayCourseCard
 import java.time.LocalTime
 import com.cumtb.mineplus.util.computeTodayCourseTimeStatuses
+import com.cumtb.mineplus.ui.theme.CoursePalettes
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -71,6 +71,7 @@ fun TodayScheduleScreen(
     viewModel: TodayScheduleViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val selectedPaletteId by viewModel.coursePaletteId.collectAsState()
     val pullState = rememberPullToRefreshState()
 
     val context = LocalContext.current
@@ -130,6 +131,27 @@ fun TodayScheduleScreen(
                         expanded = menuExpanded,
                         onDismissRequest = { menuExpanded = false }
                     ) {
+                        // Course palette selector (English)
+                        CoursePalettes.PaletteId.entries.forEach { id ->
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        text = if (id == selectedPaletteId) "✓ ${id.englishName}" else id.englishName,
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    viewModel.onCoursePaletteSelected(id)
+                                }
+                            )
+                        }
+
+                        HorizontalDivider(
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
+                            thickness = 0.5.dp
+                        )
+
                         DropdownMenuItem(
                             text = { Text(text = "关于", style = MaterialTheme.typography.bodyMedium) },
                             onClick = {
@@ -261,7 +283,7 @@ private fun TodayCourseList(courses: List<CourseSchedule>, now: LocalTime) {
 // 无课状态的文案数组
 private val NO_CLASS_MESSAGES = listOf(
     "今日无课，合法摸鱼 🎣",
-    "难得空闲，去吃顿好的吧 🍜",
+    "难得空闲，去吃点什么呢？ 🍜",
     "难得的空闲，把时间还给自己 ⏳",
     "今日无课，宜：发呆、晒太阳 ☀️",
     "系统建议立即启动\"躺平\"模式 🛌",
