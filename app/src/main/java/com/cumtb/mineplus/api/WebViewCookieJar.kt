@@ -1,4 +1,4 @@
-package com.cumtb.mineplus.data.api
+package com.cumtb.mineplus.api
 
 import android.webkit.CookieManager
 import okhttp3.Cookie

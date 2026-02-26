@@ -28,13 +28,18 @@ class CourseRepository @Inject constructor(
     /**
      * 🚀 核心方法：刷新所有课表数据
      * 这个方法会执行完整的 ETL (Extract, Transform, Load) 流程
+     *
+     * 约定：
+     * - 仓库层只做数据刷新（网络/解析/落库），不做任何 UI/导航。
+     * - 成功：正常返回
+     * - 失败：抛出异常，由 ViewModel/UI 决定如何提示/是否继续流程。
      */
-    suspend fun refreshAllData(onLoginSuccess: () -> Unit) = withContext(Dispatchers.IO) {
+    suspend fun refreshAllData() = withContext(Dispatchers.IO) {
         try {
             Log.d("MinePlus", "1️⃣ 开始获取 HTML 以解析 ID...")
             val htmlBody = api.getCoursePageHtml().string()
             val semesterId = HtmlParser.parseSemesterId(htmlBody)
-            val personId = HtmlParser.parseStdPersonId(htmlBody) // 👈 解析 personId
+            val personId = HtmlParser.parseStdPersonId(htmlBody)
 
             Log.d("MinePlus", "   解析结果: semesterId=$semesterId, personId=$personId")
 
@@ -42,7 +47,7 @@ class CourseRepository @Inject constructor(
 
             // --- 阶段 A: 获取课程清单 (get-data) ---
             Log.d("MinePlus", "2️⃣ 请求课程清单 (get-data)...")
-            val courseRes = api.getScheduleData(201)
+            val courseRes = api.getScheduleData(semesterId)
 
             // 🔥🔥🔥 新增：计算并保存学期时间信息 🔥🔥🔥
             val currentWeek = courseRes.currentWeek ?: 1
@@ -63,7 +68,6 @@ class CourseRepository @Inject constructor(
             // 保存到 DataStore
             prefs.saveSemesterInfo(semesterStartDate.toString(), maxWeek)
 
-
             val allLessons = courseRes.lessons ?: emptyList()
             if (allLessons.isEmpty()) {
                 Log.w("MinePlus", "⚠️ 课程列表为空")
@@ -82,6 +86,7 @@ class CourseRepository @Inject constructor(
             )
             val scheduleRes = api.getScheduleDatum(datumReq)
             Log.d("MinePlus", scheduleRes.result?.scheduleList?.size.toString())
+
             // --- 阶段 C: 数据清洗与转换 (Transform) ---
             Log.d("MinePlus", "4️⃣ 开始处理数据 & 分配颜色...")
 
@@ -149,10 +154,6 @@ class CourseRepository @Inject constructor(
 
             Log.d("MinePlus", "🎉 数据刷新完成！存入 ${scheduleEntities.size} 条日程。")
 
-            // ⚠️ 这里会触发导航/UI 行为，必须切回主线程
-            withContext(Dispatchers.Main) {
-                onLoginSuccess()
-            }
 
         } catch (e: Exception) {
             Log.e("MinePlus", "❌ 数据刷新失败", e)

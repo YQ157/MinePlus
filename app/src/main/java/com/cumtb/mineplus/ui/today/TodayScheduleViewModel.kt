@@ -185,7 +185,7 @@ class TodayScheduleViewModel @Inject constructor(
             isLoadingFlow.value = true
             try {
                 Log.d("MinePlus", "TodayRefresh: calling repository.refreshAllData()")
-                repository.refreshAllData(onLoginSuccess = {})
+                repository.refreshAllData()
                 Log.d("MinePlus", "TodayRefresh: repository.refreshAllData() finished")
                 if (source == RefreshSource.User) {
                     _events.tryEmit(UiEvent.RefreshSuccess)

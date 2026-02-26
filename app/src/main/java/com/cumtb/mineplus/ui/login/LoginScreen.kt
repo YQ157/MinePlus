@@ -176,8 +176,8 @@ fun LoginScreen(
 
                         webLoginMode = WebLoginMode.Hidden
 
-                        // ✅ 改为：先进入主界面，再尝试后台拉取数据（失败也不闪退）
-                        viewModel.onLoginSuccessAndNavigate(onLoginSuccess)
+                        // ✅ 新逻辑：先尝试首次同步（失败也不闪退），然后进入主界面。
+                        viewModel.onLoginSuccessFetchThenNavigate(onLoginSuccess)
                     },
                     onLoginFailed = { error ->
                         Log.e("SmartLogin", "☠️ 收到失败回调：$error")

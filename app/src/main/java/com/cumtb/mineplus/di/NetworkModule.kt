@@ -1,7 +1,7 @@
 package com.cumtb.mineplus.di
 
 import com.cumtb.mineplus.data.api.SchoolApi
-import com.cumtb.mineplus.data.api.WebViewCookieJar
+import com.cumtb.mineplus.api.WebViewCookieJar
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn

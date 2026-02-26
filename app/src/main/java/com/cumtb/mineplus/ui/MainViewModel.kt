@@ -11,6 +11,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import javax.inject.Inject
 
 @HiltViewModel
@@ -70,29 +71,47 @@ class MainViewModel @Inject constructor(
 
     /**
      * 登录成功后触发：
-     * 1) 立即进入 MainScreen（哪怕后续拉取数据失败，也不闪退）
-     * 2) 后台尝试刷新课表数据；失败时仅记录日志，数据库保持为空/旧数据
+     * - 先尝试做一次“首次同步”（可设置超时），成功就直接带数据进入；
+     * - 失败/超时也要进入 MainScreen，但此时数据库为空（或保持旧数据），UI 显示空态；
+     * - 全程不允许因为异常导致闪退。
      */
-    fun onLoginSuccessAndNavigate(onNavigateToMain: () -> Unit) {
-        // 先导航，避免被网络/解析失败阻塞或导致崩溃
-        onNavigateToMain()
-
-        // 再后台拉取数据（best-effort）
+    fun onLoginSuccessFetchThenNavigate(
+        onNavigateToMain: () -> Unit,
+        initialSyncTimeoutMs: Long = 10_000L
+    ) {
         viewModelScope.launch {
             try {
-                repository.refreshAllData(onLoginSuccess = {})
+                withTimeout(initialSyncTimeoutMs) {
+                    repository.refreshAllData()
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e("MinePlus", "❌ 登录后首次数据同步失败（将进入主界面但数据为空）", e)
+            } finally {
+                onNavigateToMain()
+            }
+        }
+    }
+
+    // 旧方法保留（可能被其他地方调用），但登录页不再使用它。
+    fun onLoginSuccessAndNavigate(onNavigateToMain: () -> Unit) {
+        onNavigateToMain()
+        viewModelScope.launch {
+            try {
+                repository.refreshAllData()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 Log.e("MinePlus", "❌ 登录后首次数据拉取失败（将进入主界面但数据为空）", e)
-                // swallow: do not crash
             }
         }
     }
 
     fun testFetchData(onLoginSuccess: () -> Unit) {
         viewModelScope.launch {
-            repository.refreshAllData(onLoginSuccess)
+            repository.refreshAllData()
+            onLoginSuccess()
         }
     }
 

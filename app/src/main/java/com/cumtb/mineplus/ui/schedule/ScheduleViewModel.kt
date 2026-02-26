@@ -89,7 +89,7 @@ class ScheduleViewModel @Inject constructor(
 
             _isLoading.value = true
             try {
-                repository.refreshAllData(onLoginSuccess = {})
+                repository.refreshAllData()
                 Log.d("MinePlus", "刷新成功")
                 if (source == RefreshSource.User) {
                     _events.tryEmit(UiEvent.RefreshSuccess)
