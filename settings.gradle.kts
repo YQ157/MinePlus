@@ -22,6 +22,9 @@ dependencyResolutionManagement {
         // 2. 原厂仓库作为备用 (防止阿里云缺包)
         google()
         mavenCentral()
+        
+        // 3. JitPack用于开源库
+        maven { url = uri("https://jitpack.io") }
     }
 }
 

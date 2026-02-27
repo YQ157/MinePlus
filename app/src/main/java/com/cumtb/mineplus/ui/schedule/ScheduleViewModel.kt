@@ -32,7 +32,9 @@ import java.net.UnknownHostException
 class ScheduleViewModel @Inject constructor(
     private val repository: CourseRepository,
     private val courseDao: CourseDao,
-    private val prefs: AppPreferences
+    private val prefs: AppPreferences,
+    private val reminderScheduler: com.cumtb.mineplus.service.CourseReminderScheduler,
+    private val reminderPrefs: com.cumtb.mineplus.data.preference.ReminderPreferences
 ) : ViewModel() {
 
     // --- 状态流 ---
@@ -90,6 +92,16 @@ class ScheduleViewModel @Inject constructor(
             _isLoading.value = true
             try {
                 repository.refreshAllData()
+
+                // 刷新成功后：如果开启了课前提醒，则重排未来3天提醒（差量）
+                try {
+                    if (reminderPrefs.reminderEnabled.first()) {
+                        reminderScheduler.scheduleRemindersForNextThreeDays()
+                    }
+                } catch (_: Exception) {
+                    // 管控成本：不影响刷新主流程
+                }
+
                 Log.d("MinePlus", "刷新成功")
                 if (source == RefreshSource.User) {
                     _events.tryEmit(UiEvent.RefreshSuccess)

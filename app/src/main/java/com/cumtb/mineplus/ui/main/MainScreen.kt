@@ -43,6 +43,9 @@ import com.cumtb.mineplus.R
 import com.cumtb.mineplus.ui.schedule.ScheduleScreen
 import com.cumtb.mineplus.ui.schedule.ScheduleViewModel
 import com.cumtb.mineplus.ui.today.TodayScheduleScreen
+import com.cumtb.mineplus.ui.service.ServiceScreen
+import com.cumtb.mineplus.ui.settings.SettingsScreen
+import com.cumtb.mineplus.ui.reminder.ReminderSettingsScreen
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.CalendarMonth
@@ -57,6 +60,12 @@ private object MainRoutes {
     const val Week = "main/week"
     const val Grades = "main/grades"
     const val More = "main/more"
+}
+
+private object ServiceRoutes {
+    const val Service = "service"
+    const val Settings = "settings"
+    const val ReminderSettings = "reminder_settings"
 }
 
 private data class MainBottomItem(
@@ -253,7 +262,21 @@ fun MainScreen(
                 }
 
                 composable(MainRoutes.More) {
-                    PlaceholderTabScreen(title = "服务", description = "暂未开放")
+                    ServiceScreen(
+                        navController = navController
+                    )
+                }
+                
+                composable(ServiceRoutes.Settings) {
+                    SettingsScreen(
+                        navController = navController
+                    )
+                }
+                
+                composable(ServiceRoutes.ReminderSettings) {
+                    ReminderSettingsScreen(
+                        navController = navController
+                    )
                 }
             }
         }

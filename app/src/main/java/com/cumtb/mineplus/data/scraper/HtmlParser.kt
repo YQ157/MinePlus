@@ -3,9 +3,7 @@ package com.cumtb.mineplus.data.scraper
 import android.util.Log
 import org.jsoup.Jsoup
 import java.util.regex.Pattern
-
 object HtmlParser {
-
     /**
      * 从课表主页 HTML 中提取当前选中的学期 ID
      * 目标 HTML 结构:

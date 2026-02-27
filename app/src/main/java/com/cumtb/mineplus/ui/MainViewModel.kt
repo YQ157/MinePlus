@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.cumtb.mineplus.data.preference.AppPreferences
 import com.cumtb.mineplus.data.preference.CredentialStorage
 import com.cumtb.mineplus.data.repository.CourseRepository
+import com.cumtb.mineplus.service.CourseReminderScheduler
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
@@ -18,7 +19,9 @@ import javax.inject.Inject
 class MainViewModel @Inject constructor(
     private val repository: CourseRepository,
     private val prefs: AppPreferences,
-    private val credentialStorage: CredentialStorage
+    private val credentialStorage: CredentialStorage,
+    private val reminderScheduler: CourseReminderScheduler,
+    private val reminderPrefs: com.cumtb.mineplus.data.preference.ReminderPreferences
 ) : ViewModel() {
 
     data class SavedCredentialsState(
@@ -84,6 +87,8 @@ class MainViewModel @Inject constructor(
                 withTimeout(initialSyncTimeoutMs) {
                     repository.refreshAllData()
                 }
+                // 数据刷新成功后重新调度提醒
+                rescheduleCourseReminders()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -136,6 +141,37 @@ class MainViewModel @Inject constructor(
             cm.flush()
 
             onCompleted()
+        }
+    }
+
+    /**
+     * 应用启动时调度课前提醒
+     * 每次打开APP时调用，设置接下来3天的课前提醒
+     */
+    fun scheduleCourseReminders() {
+        viewModelScope.launch {
+            try {
+                if (!reminderPrefs.reminderEnabled.first()) return@launch
+                reminderScheduler.scheduleRemindersForNextThreeDays()
+            } catch (_: Exception) {
+                // 静默处理，不影响主流程
+            }
+        }
+    }
+
+    /**
+     * 当课程数据发生变化时重新调度提醒
+     * 例如：刷新课表、添加/删除课程后调用
+     */
+    fun rescheduleCourseReminders() {
+        viewModelScope.launch {
+            try {
+                if (!reminderPrefs.reminderEnabled.first()) return@launch
+                reminderScheduler.cancelAllReminders()
+                reminderScheduler.scheduleRemindersForNextThreeDays()
+            } catch (_: Exception) {
+                // 静默处理
+            }
         }
     }
 }

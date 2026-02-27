@@ -3,6 +3,13 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- 课前提醒：通知权限（Android 13+） -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- 课前提醒：精确闹钟权限（Android 12+，属于受限特殊权限） -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+
     <application
         android:name=".MinePlusApp"
         android:allowBackup="true"
@@ -24,6 +31,16 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- 课程提醒广播接收器 -->
+        <receiver
+            android:name=".receiver.CourseReminderReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.cumtb.mineplus.COURSE_REMINDER" />
+            </intent-filter>
+        </receiver>
     </application>
 
 </manifest>

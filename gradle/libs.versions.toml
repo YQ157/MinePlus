@@ -1,5 +1,6 @@
 [versions]
 agp = "9.0.0"
+devicecompat = "2.3"
 kotlin = "2.0.21"
 coreKtx = "1.12.0"
 junit = "4.13.2"
@@ -20,9 +21,11 @@ room = "2.7.0"
 coil = "2.6.0"
 vico = "1.14.0"
 securityCrypto = "1.1.0-alpha06"
+xxpermissions = "28.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
+devicecompat = { module = "com.github.getActivity:DeviceCompat", version.ref = "devicecompat" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
 androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espressoCore" }
@@ -68,6 +71,7 @@ vico-compose-m3 = { group = "com.patrykandpatrick.vico", name = "compose-m3", ve
 
 # Security
 androidx-security-crypto = { group = "androidx.security", name = "security-crypto", version.ref = "securityCrypto" }
+xxpermissions = { module = "com.github.getActivity:XXPermissions", version.ref = "xxpermissions" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

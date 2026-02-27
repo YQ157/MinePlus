@@ -89,6 +89,12 @@ dependencies {
     // === 偏好 ===
     implementation(libs.androidx.datastore.preferences)
 
+    // === 权限管理 ===
+    // 设备兼容框架：https://github.com/getActivity/DeviceCompat
+    implementation(libs.devicecompat)
+    // 权限请求框架：https://github.com/getActivity/XXPermissions
+    implementation(libs.xxpermissions)
+
     // === 测试 ===
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

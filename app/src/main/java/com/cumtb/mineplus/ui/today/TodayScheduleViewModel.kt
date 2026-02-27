@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -33,7 +34,6 @@ import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
-import kotlin.random.Random
 import javax.inject.Inject
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -41,7 +41,9 @@ import javax.inject.Inject
 class TodayScheduleViewModel @Inject constructor(
     private val repository: CourseRepository,
     private val courseDao: CourseDao,
-    private val prefs: AppPreferences
+    private val prefs: AppPreferences,
+    private val reminderScheduler: com.cumtb.mineplus.service.CourseReminderScheduler,
+    private val reminderPrefs: com.cumtb.mineplus.data.preference.ReminderPreferences
 ) : ViewModel() {
 
     data class UiState(
@@ -209,6 +211,15 @@ class TodayScheduleViewModel @Inject constructor(
                 Log.d("MinePlus", "TodayRefresh: calling repository.refreshAllData()")
                 repository.refreshAllData()
                 Log.d("MinePlus", "TodayRefresh: repository.refreshAllData() finished")
+
+                // 刷新成功后：如果开启了课前提醒，则重排未来3天提醒（差量）
+                try {
+                    if (reminderPrefs.reminderEnabled.first()) {
+                        reminderScheduler.scheduleRemindersForNextThreeDays()
+                    }
+                } catch (_: Exception) {
+                }
+
                 if (source == RefreshSource.User) {
                     _events.tryEmit(UiEvent.RefreshSuccess)
                 }

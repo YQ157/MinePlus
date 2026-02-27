@@ -77,6 +77,11 @@ class MainActivity : ComponentActivity() {
 
                         // 登录后主界面（底部导航）
                         composable("schedule") {
+                            // 应用启动时调度课前提醒
+                            scope.launch {
+                                mainViewModel.scheduleCourseReminders()
+                            }
+                            
                             MainScreen(
                                 onNavigateToAbout = {
                                     navController.navigate("about")
