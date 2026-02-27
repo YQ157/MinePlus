@@ -106,6 +106,8 @@ class TodayScheduleViewModel @Inject constructor(
     private val currentWeekFlow: StateFlow<Int?> = combine(semesterStartDateFlow, todayFlow) { start, today ->
         if (start == null) return@combine null
         val daysDiff = ChronoUnit.DAYS.between(start, today)
+        // 开学前返回null，避免显示错误的周次
+        if (daysDiff < 0) return@combine null
         ((daysDiff / 7) + 1).toInt().coerceAtLeast(1)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
