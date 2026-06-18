@@ -1,215 +1,258 @@
-# MinePlus 项目接手文档（全量梳理）
+# MinePlus 项目总览
 
-> 生成时间：2026-02-25  
-> 覆盖范围：当前仓库 `:app` 模块（Compose + Hilt + Retrofit + Room + DataStore + SecurityCrypto）
+> 更新日期：2026-06-19
+> 当前范围：`:app` 单模块 Android 工程（Kotlin + Compose + Hilt + Retrofit + Room + DataStore）
 
-## 0. TL;DR（一句话理解这个 App）
-MinePlus 是一个以 **WebView 自动登录教务系统** 获取 Cookie，再用 **Retrofit 调教务接口拉取课表**，经过解析清洗后落库到 **Room**，最终用 **Jetpack Compose 课表格子视图** 展示并支持下拉刷新的 App。
+## 1. 一句话理解
 
----
+MinePlus 通过 WebView 登录学校统一认证，复用 WebView Cookie 调用教务系统接口，同步并缓存课表数据，再用 Jetpack Compose 展示今日课表、周课表，并支持课前提醒。
 
-## 1. 模块结构与目录
-- 单模块工程：`include(":app")`
-- 关键目录
-  - `app/src/main/java/com/cumtb/mineplus/`
-    - `MainActivity.kt`：入口 Activity + Compose Navigation 路由
-    - `MinePlusApp.kt`：`@HiltAndroidApp` Application
-    - `di/`：Hilt Module（Network/DB）
-    - `ui/`：Compose Screens + ViewModels + 通用组件
-    - `data/`：Repository + Room + Retrofit models + prefs + HTML 解析
-    - `util/`：工具类（时间映射）
+## 2. 技术栈
 
----
-
-## 2. 构建与依赖（Gradle）
-### 2.1 版本与编译参数
+- Android Gradle Plugin：9.0.0
+- Gradle Wrapper：9.1.0
 - Kotlin：2.0.21
-- AGP：9.0.0（来自 `libs.versions.toml`）
-- Java：17
-- minSdk：27 / targetSdk：36 / compileSdk：36
-
-### 2.2 核心依赖与用途
-- UI：Jetpack Compose（Material3）
-- 导航：`androidx.navigation:navigation-compose`
-- DI：Hilt（`com.google.dagger:hilt-android`）
-- 网络：Retrofit + OkHttp + Logging Interceptor
+- Java bytecode target：17
+- compileSdk / targetSdk：36
+- minSdk：27
+- UI：Jetpack Compose + Material3
+- DI：Hilt
+- 网络：Retrofit + OkHttp + Gson converter
 - HTML 解析：Jsoup
-- 数据库：Room（runtime/ktx/compiler）
-- 偏好：DataStore Preferences
-- 凭据加密：Security Crypto（EncryptedSharedPreferences + MasterKey）
+- 本地数据库：Room
+- 偏好存储：DataStore Preferences
+- 凭据存储：EncryptedSharedPreferences + MasterKey
+- 权限引导：XXPermissions + DeviceCompat
 
-> ✅ 当前已完成“全依赖统一版本管理”：`app/build.gradle.kts` 不再出现硬编码版本号，统一通过 `gradle/libs.versions.toml` 的 Version Catalog（`libs.*`）引用。
->
-> ✅ `navigation-compose` 的重复依赖/版本不一致已修复：现在只保留 `libs.androidx.navigation.compose` 一处。
->
-> ⚠️ Compose BOM 当前固定为 `2024.02.00`：因为项目使用的 Material3 pull-to-refresh API（`androidx.compose.material3.pulltorefresh.*`）在较新 BOM 中有破坏性变更；如需升级 BOM，需要同步迁移 `ScheduleScreen` 的下拉刷新实现。
+## 3. 构建与本地环境
 
----
+当前本机默认 Java 是 Temurin 26。直接运行 Gradle 会在 `:app:compileDebugJavaWithJavac` 前的 Android JDK image transform 阶段失败：
 
-## 3. App 入口、启动流程与路由设计
-### 3.1 AndroidManifest
-- Application：`.MinePlusApp`
-- Launcher Activity：`.MainActivity`
-- 权限：`INTERNET`
+```text
+Failed to transform core-for-system-modules.jar
+Error while executing .../temurin-26.jdk/.../bin/jlink
+```
 
-### 3.2 Navigation 路由
-`MainActivity` 内部使用 `NavHost(startDestination = "splash")`，定义 3 个路由：
-- `splash`：启动页，判断是否可直达课表
-- `login`：登录页（WebView 自动填表登录）
-- `schedule`：课表页（周次 pager + 格子课表 + 下拉刷新）
+建议使用 Android Studio 自带 JBR 21：
 
-回退栈策略：
-- 从 `splash` 导航到 `login/schedule` 时 `popUpTo("splash") { inclusive = true }`
-- 登录成功到 `schedule` 时 `popUpTo("login") { inclusive = true }`
+```bash
+JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ./gradlew testDebugUnitTest
+```
 
----
+当前已验证该命令通过。
 
-## 4. 功能清单（按用户路径）
-### 4.1 Splash：自动跳转
-- 逻辑：`SplashViewModel.shouldGoSchedule()`
-- 条件：
-  1) `AppPreferences.rememberPassword == true`
-  2) `CredentialStorage.hasCredentials() == true`
-- 满足则直接进 `schedule`，否则进 `login`
+## 4. 顶层路由
 
-### 4.2 Login：WebView 自动登录 + 持久化凭据 + 拉取课表
-- UI：用户名/密码输入、记住密码开关
-- 自动回填：`MainViewModel.loadSavedCredentials()`
-- 点击登录后展示 `SmartLoginWebView`：
-  - 加载统一认证 URL
-  - `evaluateJavascript` 注入脚本：寻找用户名/密码/按钮元素并自动提交
-  - URL 命中 `/student/home` 或 `index` 认为登录成功 -> 回调 `onLoginSuccess()`
-- 登录成功后：
-  - `MainViewModel.persistCredentials()`：
-    - remember=true：写 DataStore + 加密保存用户名密码
-    - remember=false：写 DataStore + 清空加密存储
-  - `MainViewModel.testFetchData()`：触发 `CourseRepository.refreshAllData()` 拉全量课表并落库，然后导航到 `schedule`
+入口在 `MainActivity.kt`：
 
-### 4.3 Schedule：数据库驱动课表展示 + 周次选择 + 下拉刷新
-- 数据来自 Room：`CourseDao.getSchedulesByWeek(weekIndex)` -> `Flow<List<CourseSchedule>>`
-- 顶部周次：`HorizontalPager`（page 0 对应 week 1）
-- 下拉刷新：Material3 pull-to-refresh；触发 `ScheduleViewModel.onRefreshTriggered()` -> `repository.refreshAllData()`
-- 当前周自动定位：监听 `AppPreferences.semesterStartDate/totalWeeks`，以 `startDate` 与 `LocalDate.now()` 计算当前周次
+- `splash`：启动页，判断是否能跳过登录。
+- `login`：登录页，支持自动登录与失败后的手动 WebView 登录。
+- `schedule`：登录后的主界面，内部是底部导航。
+- `about`：关于页。
 
----
+`schedule` 路由加载 `MainScreen`，底部导航包含：
 
-## 5. 分层架构与职责
-### 5.1 UI 层（Compose Screens）
-- `SplashScreen`：只负责展示 loading + 调起导航回调
-- `LoginScreen`：输入状态 + 展示 WebView + 触发 ViewModel 行为
-- `ScheduleScreen`：订阅 ViewModel StateFlow 并渲染
+- 今日：`TodayScheduleScreen`
+- 课表：`ScheduleScreen`
+- 成绩：占位页
+- 服务：`ServiceScreen`
 
-### 5.2 ViewModel 层
-- `SplashViewModel`：判断是否可跳过登录
-- `MainViewModel`：凭据读写 + 登录后触发全量刷新
-- `ScheduleViewModel`：
-  - 当前周/总周/加载态 StateFlow
-  - 从 Dao 拿 scheduleFlow
-  - 监听学期开始日期自动计算当前周
+服务页子路由：
 
-### 5.3 Data 层（核心业务）
-- `CourseRepository`：一次性 ETL：
-  1) 拉课表首页 HTML
-  2) 从 HTML 解析 `semesterId`、`stdPersonId`
-  3) 调 JSON 接口拉课程列表 + 调 datum 拉排课
-  4) 映射到 Room Entities（CourseEntity/ScheduleEntity）
-  5) 清库并写入
-  6) 保存学期开始日期与总周次到 DataStore
+- `settings`：设置页
+- `reminder_settings`：课前提醒设置页
 
----
+## 5. 登录与会话
 
-## 6. 网络层（Retrofit）与会话设计
-### 6.1 baseUrl
-- `NetworkModule.provideRetrofit()`：`https://jwxt.cumtb.edu.cn/`
+登录页由 `LoginScreen` 和 `SmartLoginWebView` 组成。
 
-### 6.2 Cookie/Session
-- `WebViewCookieJar`：OkHttp 的 CookieJar 与 Android `CookieManager` 打通
-  - WebView 登录后 Cookie 进入系统 CookieManager
-  - Retrofit 请求时从 CookieManager 读 Cookie 自动携带
-  - Retrofit 响应若 Set-Cookie，则反向写入 CookieManager
+自动登录流程：
 
-### 6.3 SchoolApi 端点
-- `GET student/for-std/course-table`：获取 HTML（解析学期与 personId）
-- `GET student/for-std/course-table/get-data?semesterId=...&bizTypeId=2`：课程列表/周次信息
-- `POST student/ws/schedule-table/datum`：提交 `DatumRequest(lessonIds,stdPersonId)` 获取排课列表
+1. 用户输入学号和密码。
+2. `SmartLoginWebView` 加载统一认证登录页。
+3. 页面加载完成后注入 JS，填充账号密码并点击登录按钮。
+4. URL 命中 `/student/home` 或 `index` 时认为登录成功。
+5. 如果勾选“记住密码”，凭据写入 `CredentialStorage`；否则只保留本次 Cookie。
+6. 登录成功后尝试执行一次首次同步，失败也进入主界面。
 
----
+Cookie 设计：
 
-## 7. 数据模型（DTO）与返回结构
-位于 `com.cumtb.mineplus.data.model`：
-- `CourseResponse`：课程列表、currentWeek、weekIndices...
-- `ScheduleResponse`：`result.scheduleList`...
-- `DatumRequest`：请求体（lessonIds + stdPersonId）
+- WebView 登录后 Cookie 进入 Android `CookieManager`。
+- OkHttp 使用 `WebViewCookieJar` 从 `CookieManager` 读取 Cookie。
+- Retrofit 响应中的 `Set-Cookie` 会写回 `CookieManager`。
 
-> 该部分建议后续补充：字段含义、与 Room/ UI 模型的映射表。
+## 6. 数据同步链路
 
----
+核心入口是 `CourseRepository.refreshAllData()`。
 
-## 8. 本地存储
-### 8.1 Room 数据库
-- DB：`AppDatabase(version=1)`，表：`courses`、`schedules`
-- CourseEntity（courses）：
-  - 主键 `lessonId`
-  - name/teacher/credit/colorIndex/rawScheduleText
-- ScheduleEntity（schedules）：
-  - 自增主键 id
-  - 外键 lessonId -> courses.lessonId（CASCADE）
-  - weekIndex/dayOfWeek/startNode/step/room/rawStartTime/rawEndTime/date
-- 核心查询：`CourseDao.getSchedulesByWeek(weekIndex)` INNER JOIN 输出 UI 聚合模型 `CourseSchedule`
+同步步骤：
 
-### 8.2 DataStore（AppPreferences）
-- `semester_start_date`：学期第 1 周周一（ISO 日期字符串）
-- `total_weeks`：总周数
-- `remember_password`：是否记住密码
+1. 请求 `student/for-std/course-table` 获取 HTML。
+2. 用 `HtmlParser` 解析 `semesterId` 和 `stdPersonId`。
+3. 调 `get-data` 接口获取课程列表、当前周和周次范围。
+4. 根据当前周反推学期第一周周一，并保存到 DataStore。
+5. 调 `student/ws/schedule-table/datum` 获取排课详情。
+6. 转换为 `CourseEntity` 与 `ScheduleEntity`。
+7. 清空旧课程和旧排课，写入 Room。
 
-### 8.3 EncryptedSharedPreferences（CredentialStorage）
-- 加密保存 username/password
-- 只在 remember_password=true 时保留
+颜色分配：
 
----
+- 按课程 `lessonId` 排序后取模分配 `colorIndex`。
+- 课程配色方案由 `AppPreferences.coursePaletteId` 持久化。
 
-## 9. 核心数据流（从启动到课表）
-1) 启动 -> `SplashScreen`
-2) `SplashViewModel.shouldGoSchedule()`：
-   - true：进 `schedule`
-   - false：进 `login`
-3) 登录：`SmartLoginWebView` 自动提交统一认证
-4) 登录成功：保存凭据（可选）
-5) `CourseRepository.refreshAllData()`：
-   - HTML -> 解析 semesterId/personId
-   - JSON -> 课程列表 + datum 排课
-   - 映射实体 -> 清库 -> 插入
-   - 保存学期开始日期/总周次
-6) `ScheduleScreen` 订阅 Room Flow 自动展示
+## 7. 本地存储
 
----
+Room 数据库：
 
-## 10. 已发现的风险点 / TODO（建议优先级）
-### P0（高优先级）
-- `CourseRepository` 解析了 `semesterId` 但调用 `getScheduleData(281)` 硬编码：应替换为解析结果并做容错。
-- `app/build.gradle.kts` 中 `navigation-compose` 存在重复 & 版本不一致：建议只保留一种（推荐完全使用 Version Catalog）。
-- `SmartLoginWebView` 当前 `Modifier.alpha(1f)` 实际未隐藏，且在登录页覆盖全屏；如果本意是“几乎透明但可执行 JS”，建议改回 `0.01f` 并验证交互。
+- DB 文件：`mine_plus.db`
+- version：2
+- 表：
+  - `courses`
+  - `schedules`
 
-### P1（中优先级）
-- `fallbackToDestructiveMigration()` 会在表结构变更时清空数据：生产环境需要迁移策略。
-- SSL 错误全部 `handler.proceed()` 有安全风险（仅开发环境可接受）。
+DAO 关键查询：
 
-### P2（建议优化）
-- ScheduleScreen 左侧时间轴与右侧内容滚动不同步。
-- 缺少错误上报/Toast 机制（目前只打 log）。
+- `getSchedulesByWeek(weekIndex)`：按周查询课程聚合模型。
+- `getMaxWeekIndex()`：获取最大周次。
+- `getUpcomingWeekIndex(today)`：按日期定位接下来有课的周次。
 
----
+DataStore：
 
-## 11. 快速上手（给新同学的 30 分钟路线）
-1) 从 `MainActivity` 看路由与页面流转
-2) 看 `SmartLoginWebView`：登录成功判定条件 + Cookie 策略
-3) 看 `CourseRepository.refreshAllData()`：ETL 逻辑与落库
-4) 看 `CourseDao.getSchedulesByWeek()`：如何把两张表 join 成 UI 模型
-5) 看 `ScheduleScreen`：如何把 CourseSchedule 渲染成格子
+- `app_prefs`
+  - `semester_start_date`
+  - `total_weeks`
+  - `remember_password`
+  - `course_palette`
+- `reminder_settings`
+  - `reminder_enabled`
+- `reminder_alarm_store`
+  - `alarm_ids`
 
----
+加密存储：
 
-## 12. 接下来我可以继续补全的内容（可选）
-- 把 `CourseResponse` / `ScheduleResponse` 字段逐个解释并画映射表
-- 针对登录与课表接口，补“失败原因分类 + 重试策略 + 失效重登录”建议
-- 加一个最小的单元测试：HtmlParser/TimeMapper/Dao 查询映射（Robolectric/Room in-memory）
+- `CredentialStorage` 保存用户名和密码。
+- 手动 WebView 登录成功时只保存用户名，不保存密码。
+
+## 8. UI 层
+
+### 今日课表
+
+`TodayScheduleViewModel` 负责：
+
+- 根据学期开始日期计算当前周。
+- 根据当天星期过滤课程。
+- 使用 `minuteAlignedTickerFlow` 每分钟刷新当前时间。
+- 计算假期倒计时文案。
+- 下拉刷新课表。
+
+`TodayScheduleScreen` 负责：
+
+- 顶部日期标题。
+- 空状态、假期文案、重新登录/查看周课表入口。
+- 课程列表与时间状态展示。
+- 课程配色方案选择。
+
+### 周课表
+
+`ScheduleViewModel` 负责：
+
+- 当前周、最大周、加载状态。
+- 根据 active weeks 聚合周课表数据。
+- 预热当前周与相邻周，减少第一次打开周课表的卡顿。
+- 下拉刷新课表。
+- 持久化课程配色方案。
+
+`ScheduleScreen` 负责：
+
+- 周次 pager。
+- 表头日期和今天列高亮。
+- 左侧时间轴。
+- 课程卡片网格。
+- 点击课程卡片后的详情浮层。
+
+### 服务与设置
+
+- `ServiceScreen`：设置入口、后续校园服务占位。
+- `SettingsScreen`：课前提醒入口，账号相关功能仍占位。
+- `ReminderSettingsScreen`：提醒开关与权限引导。
+- `AboutScreen`：应用说明占位，后续可加版本号、更新日志和开源协议。
+
+## 9. 课前提醒
+
+主要类：
+
+- `ReminderPreferences`：保存提醒总开关。
+- `CourseReminderScheduler`：为未来 3 天课程设置 AlarmManager 闹钟。
+- `ReminderAlarmStore`：保存已设置的 alarmId 集合，用于差量取消。
+- `CourseReminderReceiver`：接收闹钟广播。
+- `CourseNotificationHelper`：创建通知渠道并发送通知。
+- `PermissionManager`：通知、精确闹钟、电池优化等权限检查和设置页跳转。
+
+调度规则：
+
+- 当前只保留课前提醒。
+- 默认课前 15 分钟提醒。
+- 如果默认提醒时间落在另一节课中，则顺延到冲突课程的下课时间。
+- 每次开启提醒、刷新课表或进入主界面时会 best-effort 重新调度。
+
+已知边界：
+
+- 设备重启后系统闹钟会丢失，目前还没有 `BOOT_COMPLETED` 恢复逻辑。
+- Android 12+ 精确闹钟权限可能不可用，会降级为非精确闹钟。
+- Android 13+ 需要通知权限，否则通知不会展示。
+
+## 10. 测试现状
+
+已有测试：
+
+- `TimeStatusUtilsTest`：今日课程时间状态。
+- `CourseReminderSchedulerTest`：提醒时间冲突规则的纯算法用例。
+- `ReminderTimeAlgorithmTest`：链式冲突相关补充用例。
+- 默认模板测试：`ExampleUnitTest`、`ExampleInstrumentedTest`。
+
+已验证命令：
+
+```bash
+JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ./gradlew testDebugUnitTest
+```
+
+测试缺口：
+
+- Repository 网络/解析/落库流程缺少 mock 测试。
+- Room DAO 缺少 in-memory 测试。
+- WebView 登录流程缺少可自动化验证。
+- AlarmManager 和通知链路缺少 Android/Robolectric 测试。
+- 主要 Compose 页面缺少截图或 UI 测试。
+
+## 11. 已知风险与维护点
+
+安全与发布：
+
+- `MinePlusApp` 当前无条件启用 `WebView.setWebContentsDebuggingEnabled(true)`，发布前应只在 debug 构建开启。
+- `SmartLoginWebView` 当前对 SSL 错误调用 `handler.proceed()`，发布前应收紧。
+- OkHttp logging 当前为 `BODY`，发布前应按构建类型降级。
+- 凭据虽然加密保存，但仍应避免在日志中输出敏感信息。
+
+数据与架构：
+
+- Room 仍使用 `fallbackToDestructiveMigration()`，生产发布前应补 migration。
+- `SchoolApi.kt` 文件路径与包名不一致：文件在 `api/`，包名是 `com.cumtb.mineplus.data.api`。
+- `MainActivity` 中进入 `schedule` 时直接在 composable body 调用 `scope.launch` 调度提醒，后续应改为 `LaunchedEffect`，避免重组时重复触发。
+- 今日页和周课表页都有刷新逻辑，可考虑抽出统一刷新用例。
+
+构建与依赖：
+
+- `gradle.properties` 中多项 AGP 旧开关已提示将在 AGP 10 移除。
+- `app/build.gradle.kts` 的 `kotlinOptions` 已有弃用提示，后续迁移到 `compilerOptions`。
+- `SettingsScreen` 使用的 `Icons.Filled.ArrowBack` 已弃用，应改为 AutoMirrored。
+- `TodayScheduleViewModel` 有 unchecked cast 警告，可拆 combine 参数消除。
+
+## 12. 继续开发建议
+
+近期优先级建议：
+
+1. 先处理提醒调度的重组副作用与设备重启恢复。
+2. 再收紧 WebView/SSL/logging 的发布安全边界。
+3. 为 Repository、DAO、提醒调度补可重复运行的测试。
+4. 完成设置页中的退出登录、账号管理和关于页信息。
+5. 开始成绩查询前，先沉淀统一网络错误处理和会话过期重登录机制。
