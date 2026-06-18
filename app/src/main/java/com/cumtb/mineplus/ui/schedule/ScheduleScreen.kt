@@ -714,7 +714,7 @@ internal fun CourseCard(
         Spacer(modifier = Modifier.height(Dimens.textSpacing))
 
         Text(
-            text = course.room.replace(" 教学楼", ""), // 简单去重，让显示更短
+            text = course.room.replace("教学楼", ""), // 简单去重，让显示更短
             style = roomStyleToUse,
             color = textColor.copy(alpha = 0.9f),
             textAlign = TextAlign.Center,

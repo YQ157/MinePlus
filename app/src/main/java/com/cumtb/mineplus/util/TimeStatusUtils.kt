@@ -4,24 +4,22 @@ import java.time.Duration
 import java.time.LocalTime
 
 /**
- *     
- *
- *         
+ * Course time status used by the today schedule UI.
  */
 enum class CourseTimeStatus {
-    /**  */
+    /** Course has not started yet. */
     UPCOMING,
 
-    /**  */
+    /** Course is the nearest upcoming class within the reminder window. */
     STARTING_SOON,
 
-    /**  */
+    /** Current time is within the class time range. */
     IN_PROGRESS,
 
-    /**  */
+    /** Course has already ended. */
     FINISHED,
 
-    /**  */
+    /** Course time could not be parsed or is invalid. */
     UNKNOWN
 }
 
