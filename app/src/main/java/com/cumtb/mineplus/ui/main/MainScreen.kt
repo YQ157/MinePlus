@@ -270,7 +270,8 @@ fun MainScreen(
                 
                 composable(ServiceRoutes.Settings) {
                     SettingsScreen(
-                        navController = navController
+                        navController = navController,
+                        onNavigateToAbout = onNavigateToAbout
                     )
                 }
                 

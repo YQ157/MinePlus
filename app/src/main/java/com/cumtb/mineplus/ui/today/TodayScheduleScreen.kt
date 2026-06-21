@@ -19,15 +19,12 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -57,10 +54,11 @@ import androidx.compose.ui.unit.sp
 import kotlin.random.Random
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.cumtb.mineplus.data.model.CourseSchedule
+import com.cumtb.mineplus.ui.components.GlassOverflowMenu
+import com.cumtb.mineplus.ui.components.GlassOverflowMenuItem
 import com.cumtb.mineplus.ui.today.components.TodayCourseCard
 import java.time.LocalTime
 import com.cumtb.mineplus.util.computeTodayCourseTimeStatuses
-import com.cumtb.mineplus.ui.theme.CoursePalettes
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -71,7 +69,6 @@ fun TodayScheduleScreen(
     viewModel: TodayScheduleViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val selectedPaletteId by viewModel.coursePaletteId.collectAsState()
     val pullState = rememberPullToRefreshState()
 
     val context = LocalContext.current
@@ -101,7 +98,6 @@ fun TodayScheduleScreen(
         if (!uiState.isLoading) pullState.endRefresh()
     }
 
-    var menuExpanded by remember { mutableStateOf(false) }
     val menuIconSize = 36.dp
 
     Scaffold(
@@ -123,56 +119,21 @@ fun TodayScheduleScreen(
                     )
                 },
                 actions = {
-                    IconButton(
-                        onClick = { menuExpanded = true },
-                        modifier = Modifier.size(menuIconSize)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.MoreVert,
-                            contentDescription = "Menu"
-                        )
-                    }
-
-                    DropdownMenu(
-                        expanded = menuExpanded,
-                        onDismissRequest = { menuExpanded = false }
-                    ) {
-                        // Course palette selector (English)
-                        CoursePalettes.PaletteId.entries.forEach { id ->
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        text = if (id == selectedPaletteId) "✓ ${id.englishName}" else id.englishName,
-                                        style = MaterialTheme.typography.bodyMedium
-                                    )
-                                },
-                                onClick = {
-                                    menuExpanded = false
-                                    viewModel.onCoursePaletteSelected(id)
-                                }
+                    GlassOverflowMenu(
+                        iconSize = menuIconSize,
+                        items = listOf(
+                            GlassOverflowMenuItem(
+                                text = "关于",
+                                icon = Icons.Filled.Info,
+                                onClick = onNavigateToAbout
+                            ),
+                            GlassOverflowMenuItem(
+                                text = "重新登录",
+                                icon = Icons.AutoMirrored.Filled.Logout,
+                                onClick = onRelogin
                             )
-                        }
-
-                        HorizontalDivider(
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
-                            thickness = 0.5.dp
                         )
-
-                        DropdownMenuItem(
-                            text = { Text(text = "关于", style = MaterialTheme.typography.bodyMedium) },
-                            onClick = {
-                                menuExpanded = false
-                                onNavigateToAbout()
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text(text = "重新登录", style = MaterialTheme.typography.bodyMedium) },
-                            onClick = {
-                                menuExpanded = false
-                                onRelogin()
-                            }
-                        )
-                    }
+                    )
                 },
                 // Match Week screen: white/neutral top bar with top divider.
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(

@@ -10,14 +10,13 @@ import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -55,6 +54,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.cumtb.mineplus.data.model.CourseSchedule
+import com.cumtb.mineplus.ui.components.GlassOverflowMenu
+import com.cumtb.mineplus.ui.components.GlassOverflowMenuItem
 import com.cumtb.mineplus.ui.theme.CoursePalettes
 import com.cumtb.mineplus.ui.theme.Dimens
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -133,7 +134,6 @@ fun ScheduleScreen(
         }
     }
 
-    var menuExpanded by remember { mutableStateOf(false) }
     var weekMenuExpanded by remember { mutableStateOf(false) }
 
     // Keep the TopAppBar compact. 48.dp tends to make the bar feel too tall.
@@ -224,65 +224,21 @@ fun ScheduleScreen(
                     }
                 },
                 actions = {
-                    IconButton(
-                        onClick = { menuExpanded = true },
-                        modifier = Modifier.size(menuIconSize)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.MoreVert,
-                            contentDescription = "Menu"
-                        )
-                    }
-                    DropdownMenu(
-                        expanded = menuExpanded,
-                        onDismissRequest = { menuExpanded = false }
-                    ) {
-                        // Course palette selector (English)
-                        CoursePalettes.PaletteId.entries.forEach { id ->
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        text = if (id == selectedPaletteId) "✓ ${id.englishName}" else id.englishName,
-                                        style = MaterialTheme.typography.bodyMedium
-                                    )
-                                },
-                                onClick = {
-                                    menuExpanded = false
-                                    viewModel.onCoursePaletteSelected(id)
-                                }
+                    GlassOverflowMenu(
+                        iconSize = menuIconSize,
+                        items = listOf(
+                            GlassOverflowMenuItem(
+                                text = "关于",
+                                icon = Icons.Filled.Info,
+                                onClick = onNavigateToAbout
+                            ),
+                            GlassOverflowMenuItem(
+                                text = "重新登录",
+                                icon = Icons.AutoMirrored.Filled.Logout,
+                                onClick = onRelogin
                             )
-                        }
-
-                        HorizontalDivider(
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
-                            thickness = 0.5.dp
                         )
-
-                        DropdownMenuItem(
-                            text = { 
-                                Text(
-                                    text = "关于",
-                                    style = MaterialTheme.typography.bodyMedium
-                                ) 
-                            },
-                            onClick = {
-                                menuExpanded = false
-                                onNavigateToAbout()
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    text = "重新登录",
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
-                            },
-                            onClick = {
-                                menuExpanded = false
-                                onRelogin()
-                            }
-                        )
-                    }
+                    )
                 },
                 // Match Today screen: white/neutral top bar with top divider.
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(

@@ -5,13 +5,13 @@ import androidx.compose.ui.graphics.Color
 object CoursePalettes {
 
     /** Persisted id for a course color palette. */
-    enum class PaletteId(val storageKey: String, val englishName: String) {
-        TraditionalCN(storageKey = "traditional_cn", englishName = "Traditional CN"),
-        Morandi(storageKey = "morandi", englishName = "Morandi"),
-        Macaron(storageKey = "macaron", englishName = "Macaron"),
-        VibrantPastel(storageKey = "vibrant_pastel", englishName = "Vibrant Pastel"),
-        ForestNature(storageKey = "forest_nature", englishName = "Forest Nature"),
-        VintageFilm(storageKey = "vintage_film", englishName = "Vintage Film")
+    enum class PaletteId(val storageKey: String, val chineseName: String) {
+        TraditionalCN(storageKey = "traditional_cn", chineseName = "新中式传统色"),
+        Morandi(storageKey = "morandi", chineseName = "莫兰迪柔色"),
+        Macaron(storageKey = "macaron", chineseName = "马卡龙糖果色"),
+        VibrantPastel(storageKey = "vibrant_pastel", chineseName = "明亮粉彩色"),
+        ForestNature(storageKey = "forest_nature", chineseName = "森林自然色"),
+        VintageFilm(storageKey = "vintage_film", chineseName = "复古胶片色")
     }
 
     val defaultPaletteId: PaletteId = PaletteId.TraditionalCN
