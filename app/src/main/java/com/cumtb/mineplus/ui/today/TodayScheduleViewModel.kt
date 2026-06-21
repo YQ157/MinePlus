@@ -54,7 +54,7 @@ class TodayScheduleViewModel @Inject constructor(
         val hasNoData: Boolean,
         /** 用于在 UI 层推导“进行中/即将开始”等时间状态；通过 ticker 自动刷新 */
         val now: LocalDateTime,
-        /** 假期剩余天数，用于显示倒计时文案 */
+        /** 距离开学剩余天数。仅开学前/开学当天有值，开学后为 null。 */
         val vacationDaysLeft: Long?
     )
 
@@ -129,11 +129,11 @@ class TodayScheduleViewModel @Inject constructor(
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-    /** 假期剩余天数计算 */
+    /** 距离开学剩余天数计算 */
     private val vacationDaysLeftFlow: StateFlow<Long?> = combine(semesterStartDateFlow, todayFlow) { start, today ->
         if (start == null) return@combine null
-        val daysDiff = ChronoUnit.DAYS.between(today, start)
-        daysDiff
+        val daysUntilStart = ChronoUnit.DAYS.between(today, start)
+        daysUntilStart.takeIf { it >= 0 }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     /** Persisted course card palette id, shared with Schedule screen. */

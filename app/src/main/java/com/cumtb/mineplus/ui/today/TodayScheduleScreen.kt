@@ -205,7 +205,8 @@ fun TodayScheduleScreen(
                 when {
                     uiState.hasNoData -> {
                         TodayEmptyStateScrollHost(
-                            title = "还没有课表数据",
+                            mode = TodayEmptyStateMode.NoData,
+                            title = "重新登录后同步最新课表",
                             actionText = "重新登录",
                             onAction = onRelogin,
                             refreshNonce = refreshNonce,
@@ -215,6 +216,7 @@ fun TodayScheduleScreen(
                 
                     uiState.courses.isEmpty() -> {
                         TodayEmptyStateScrollHost(
+                            mode = TodayEmptyStateMode.NoClass,
                             title = "", // 不显示"今天没有课"这行副标题
                             actionText = "查看周课表",
                             onAction = onNavigateToWeek,
@@ -307,6 +309,21 @@ private data class VacationMessage(
     val messages: List<String>
 )
 
+private enum class TodayEmptyStateMode {
+    NoData,
+    NoClass
+}
+
+private val NO_CLASS_MESSAGES = listOf(
+    "今日无课，合法摸鱼 🎣",
+    "难得空闲，去吃点什么呢？ 🍜",
+    "难得的空闲，把时间还给自己 ⏳",
+    "今日无课，宜：发呆、晒太阳 ☀️",
+    "系统建议立即启动\"躺平\"模式 🛌",
+    "今日无课，要不要去图书馆？ 📚",
+    "自由时间已到账 💰"
+)
+
 private val VACATION_MESSAGES = listOf(
     // 开学当天且没课的情况
     VacationMessage(
@@ -352,33 +369,28 @@ private val VACATION_MESSAGES = listOf(
 
 @Composable
 private fun TodayEmptyState(
+    mode: TodayEmptyStateMode,
     title: String,
     actionText: String,
     onAction: () -> Unit,
     refreshNonce: Int,
     vacationDaysLeft: Long?
 ) {
-    // 根据假期天数选择合适的文案
-    val countdownMessage = remember(vacationDaysLeft, refreshNonce) {
-        if (vacationDaysLeft == null) {
-            // 如果没有开学日期信息，使用默认文案
-            listOf(
-                "今日无课，合法摸鱼 🎣",
-                "难得空闲，去吃点什么呢？ 🍜",
-                "难得的空闲，把时间还给自己 ⏳",
-                "今日无课，宜：发呆、晒太阳 ☀️",
-                "系统建议立即启动\"躺平\"模式 🛌",
-                "今日无课，要不要去图书馆？ 📚",
-                "自由时间已到账 💰"
-            ).random(Random(System.currentTimeMillis()))
-        } else {
-            // 根据天数选择对应的文案组
-            val messageGroup = VACATION_MESSAGES.find { it.condition(vacationDaysLeft) }
-                ?: VACATION_MESSAGES.last() // 默认使用最后一个（最长假期）
-            
-            // 选择随机文案并替换占位符
-            val template = messageGroup.messages.random(Random(System.currentTimeMillis()))
-            template.replace("{days}", vacationDaysLeft.toString())
+    // 根据空状态类型和开学倒计时选择合适的文案。
+    val countdownMessage = remember(mode, vacationDaysLeft, refreshNonce) {
+        when (mode) {
+            TodayEmptyStateMode.NoData -> "还没有课表数据"
+            TodayEmptyStateMode.NoClass -> {
+                val daysUntilStart = vacationDaysLeft?.takeIf { it >= 0 }
+                if (daysUntilStart == null) {
+                    NO_CLASS_MESSAGES.random(Random(System.currentTimeMillis()))
+                } else {
+                    val messageGroup = VACATION_MESSAGES.find { it.condition(daysUntilStart) }
+                    val template = messageGroup?.messages?.random(Random(System.currentTimeMillis()))
+                        ?: NO_CLASS_MESSAGES.random(Random(System.currentTimeMillis()))
+                    template.replace("{days}", daysUntilStart.toString())
+                }
+            }
         }
     }
 
@@ -511,6 +523,7 @@ private fun TodayEmptyState(
 
 @Composable
 private fun TodayEmptyStateScrollHost(
+    mode: TodayEmptyStateMode,
     title: String,
     actionText: String,
     onAction: () -> Unit,
@@ -532,6 +545,7 @@ private fun TodayEmptyStateScrollHost(
                     contentAlignment = Alignment.Center
                 ) {
                     TodayEmptyState(
+                        mode = mode,
                         title = title,
                         actionText = actionText,
                         onAction = onAction,
