@@ -533,6 +533,7 @@ private fun GradeSmoothTrendChart(semesterSummaries: List<GradeSemesterSummary>)
             semesterSummary.summary.weightedAverage?.let { score ->
                 GradeTrendPoint(
                     semesterName = semesterSummary.semester.name,
+                    gpa = semesterSummary.summary.gpa,
                     weightedAverage = score
                 )
             }
@@ -689,15 +690,20 @@ private fun GradeSmoothTrendChart(semesterSummaries: List<GradeSemesterSummary>)
                         }
 
                         if (selectedPoint != null && selectedOffset != null && chartSize.width > 0) {
-                            val tooltipWidth = 136.dp
+                            val tooltipWidth = 126.dp
                             val tooltipWidthPx = with(density) { tooltipWidth.toPx() }
                             val tooltipHeightPx = with(density) { 58.dp.toPx() }
+                            val tooltipGapPx = with(density) { 10.dp.toPx() }
                             val x = (selectedOffset.x - tooltipWidthPx / 2f)
                                 .roundToInt()
                                 .coerceIn(0, (chartSize.width - tooltipWidthPx).roundToInt().coerceAtLeast(0))
-                            val y = (selectedOffset.y - tooltipHeightPx - with(density) { Dimens.tiny2.toPx() })
-                                .roundToInt()
-                                .coerceIn(0, chartSize.height)
+                            val aboveY = selectedOffset.y - tooltipHeightPx - tooltipGapPx
+                            val belowY = selectedOffset.y + tooltipGapPx
+                            val y = if (aboveY >= 0f) {
+                                aboveY
+                            } else {
+                                belowY.coerceAtMost(chartSize.height - tooltipHeightPx)
+                            }.roundToInt().coerceAtLeast(0)
 
                             GradeTrendTooltip(
                                 point = selectedPoint,
@@ -731,7 +737,7 @@ private fun GradeTrendTooltip(
         )
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = Dimens.small2, vertical = Dimens.tiny2),
+            modifier = Modifier.padding(horizontal = Dimens.tiny2, vertical = Dimens.tiny2),
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             Text(
@@ -743,7 +749,7 @@ private fun GradeTrendTooltip(
                 overflow = TextOverflow.Ellipsis
             )
             Text(
-                text = "加权分 ${point.weightedAverage.formatNumber()}",
+                text = "GPA ${point.gpa?.formatNumber() ?: "--"} · 加权分 ${point.weightedAverage.formatNumber()}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
@@ -1114,6 +1120,7 @@ private fun GradeItem.detailText(): String {
 
 private data class GradeTrendPoint(
     val semesterName: String,
+    val gpa: Double?,
     val weightedAverage: Double
 )
 
