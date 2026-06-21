@@ -44,6 +44,7 @@ class CourseRepository @Inject constructor(
             Log.d("MinePlus", "   解析结果: semesterId=$semesterId, personId=$personId")
 
             if (personId == -1L) throw Exception("无法获取用户ID (stdPersonId)")
+            prefs.saveStdPersonId(personId)
 
             // --- 阶段 A: 获取课程清单 (get-data) ---
             Log.d("MinePlus", "2️⃣ 请求课程清单 (get-data)...")

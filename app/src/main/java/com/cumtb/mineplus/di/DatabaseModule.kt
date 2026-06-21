@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import com.cumtb.mineplus.data.database.AppDatabase
 import com.cumtb.mineplus.data.database.CourseDao
+import com.cumtb.mineplus.data.database.GradeDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -32,5 +33,10 @@ object DatabaseModule {
     @Provides
     fun provideCourseDao(database: AppDatabase): CourseDao {
         return database.courseDao()
+    }
+
+    @Provides
+    fun provideGradeDao(database: AppDatabase): GradeDao {
+        return database.gradeDao()
     }
 }

@@ -23,6 +23,9 @@ class AppPreferences @Inject constructor(
         val KEY_SEMESTER_START_DATE = stringPreferencesKey("semester_start_date")
         val KEY_TOTAL_WEEKS = intPreferencesKey("total_weeks")
         val KEY_REMEMBER_PASSWORD = booleanPreferencesKey("remember_password")
+        val KEY_STD_PERSON_ID = longPreferencesKey("std_person_id")
+        val KEY_GRADE_DATA_ID = longPreferencesKey("grade_data_id")
+        val KEY_GRADE_FETCHED_AT = longPreferencesKey("grade_fetched_at")
 
         // Course card palette
         val KEY_COURSE_PALETTE = stringPreferencesKey("course_palette")
@@ -47,6 +50,21 @@ class AppPreferences @Inject constructor(
             preferences[KEY_REMEMBER_PASSWORD] ?: false
         }
 
+    val stdPersonId: Flow<Long?> = context.dataStore.data
+        .map { preferences ->
+            preferences[KEY_STD_PERSON_ID]
+        }
+
+    val gradeDataId: Flow<Long?> = context.dataStore.data
+        .map { preferences ->
+            preferences[KEY_GRADE_DATA_ID]
+        }
+
+    val gradeFetchedAt: Flow<Long?> = context.dataStore.data
+        .map { preferences ->
+            preferences[KEY_GRADE_FETCHED_AT]
+        }
+
     /** Selected course palette id (persisted). Defaults to [CoursePalettes.defaultPaletteId]. */
     val coursePaletteId: Flow<CoursePalettes.PaletteId> = context.dataStore.data
         .map { preferences ->
@@ -65,6 +83,39 @@ class AppPreferences @Inject constructor(
     suspend fun setRememberPassword(remember: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[KEY_REMEMBER_PASSWORD] = remember
+        }
+    }
+
+    suspend fun saveStdPersonId(stdPersonId: Long) {
+        context.dataStore.edit { preferences ->
+            preferences[KEY_STD_PERSON_ID] = stdPersonId
+        }
+    }
+
+    suspend fun saveGradeDataId(gradeDataId: Long) {
+        context.dataStore.edit { preferences ->
+            preferences[KEY_GRADE_DATA_ID] = gradeDataId
+        }
+    }
+
+    suspend fun saveGradeFetchedAt(fetchedAt: Long) {
+        context.dataStore.edit { preferences ->
+            preferences[KEY_GRADE_FETCHED_AT] = fetchedAt
+        }
+    }
+
+    suspend fun clearGradeSession() {
+        context.dataStore.edit { preferences ->
+            preferences.remove(KEY_GRADE_DATA_ID)
+            preferences.remove(KEY_GRADE_FETCHED_AT)
+        }
+    }
+
+    suspend fun clearAccountSession() {
+        context.dataStore.edit { preferences ->
+            preferences.remove(KEY_STD_PERSON_ID)
+            preferences.remove(KEY_GRADE_DATA_ID)
+            preferences.remove(KEY_GRADE_FETCHED_AT)
         }
     }
 

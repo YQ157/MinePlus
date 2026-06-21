@@ -43,6 +43,7 @@ import com.cumtb.mineplus.R
 import com.cumtb.mineplus.ui.schedule.ScheduleScreen
 import com.cumtb.mineplus.ui.schedule.ScheduleViewModel
 import com.cumtb.mineplus.ui.today.TodayScheduleScreen
+import com.cumtb.mineplus.ui.grade.GradeScreen
 import com.cumtb.mineplus.ui.service.ServiceScreen
 import com.cumtb.mineplus.ui.settings.SettingsScreen
 import com.cumtb.mineplus.ui.reminder.ReminderSettingsScreen
@@ -258,7 +259,7 @@ fun MainScreen(
                 }
 
                 composable(MainRoutes.Grades) {
-                    PlaceholderTabScreen(title = "成绩", description = "暂未开放")
+                    GradeScreen()
                 }
 
                 composable(MainRoutes.More) {

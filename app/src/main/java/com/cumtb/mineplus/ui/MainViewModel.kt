@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.cumtb.mineplus.data.preference.AppPreferences
 import com.cumtb.mineplus.data.preference.CredentialStorage
 import com.cumtb.mineplus.data.repository.CourseRepository
+import com.cumtb.mineplus.data.repository.GradeRepository
 import com.cumtb.mineplus.service.CourseReminderScheduler
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
@@ -18,6 +19,7 @@ import javax.inject.Inject
 @HiltViewModel
 class MainViewModel @Inject constructor(
     private val repository: CourseRepository,
+    private val gradeRepository: GradeRepository,
     private val prefs: AppPreferences,
     private val credentialStorage: CredentialStorage,
     private val reminderScheduler: CourseReminderScheduler,
@@ -84,6 +86,8 @@ class MainViewModel @Inject constructor(
     ) {
         viewModelScope.launch {
             try {
+                prefs.clearAccountSession()
+                gradeRepository.clearLocalCache()
                 withTimeout(initialSyncTimeoutMs) {
                     repository.refreshAllData()
                 }
@@ -104,6 +108,8 @@ class MainViewModel @Inject constructor(
         onNavigateToMain()
         viewModelScope.launch {
             try {
+                prefs.clearAccountSession()
+                gradeRepository.clearLocalCache()
                 repository.refreshAllData()
             } catch (e: CancellationException) {
                 throw e
@@ -115,6 +121,8 @@ class MainViewModel @Inject constructor(
 
     fun testFetchData(onLoginSuccess: () -> Unit) {
         viewModelScope.launch {
+            prefs.clearAccountSession()
+            gradeRepository.clearLocalCache()
             repository.refreshAllData()
             onLoginSuccess()
         }
@@ -122,6 +130,8 @@ class MainViewModel @Inject constructor(
 
     fun clearSession(onCompleted: () -> Unit = {}) {
         viewModelScope.launch {
+            prefs.clearAccountSession()
+            gradeRepository.clearLocalCache()
             val cm = CookieManager.getInstance()
             cm.removeAllCookies(null)
             cm.flush()
@@ -134,6 +144,8 @@ class MainViewModel @Inject constructor(
             // 1) Clear local remembered credentials
             prefs.setRememberPassword(false)
             credentialStorage.clear()
+            prefs.clearAccountSession()
+            gradeRepository.clearLocalCache()
 
             // 2) Clear WebView/OkHttp cookies (this app's CookieJar reads from CookieManager)
             val cm = CookieManager.getInstance()

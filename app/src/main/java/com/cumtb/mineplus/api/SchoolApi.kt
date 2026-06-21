@@ -7,6 +7,7 @@ import okhttp3.ResponseBody
 import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.Headers
+import retrofit2.http.Path
 import retrofit2.http.POST
 import retrofit2.http.Query
 
@@ -20,6 +21,12 @@ interface SchoolApi {
     )
     suspend fun getCoursePageHtml(): ResponseBody
 
+    @GET("student/for-std/grade/sheet")
+    @Headers(
+        "User-Agent: Mozilla/5.0 (Android) MinePlus/1.0"
+    )
+    suspend fun getGradePageHtml(): ResponseBody
+
     // 2. 获取课表数据 JSON
     // URL: .../get-data?bizTypeId=2&semesterId=281
     @GET("student/for-std/course-table/get-data")
@@ -31,4 +38,11 @@ interface SchoolApi {
     // 获取课表日程
     @POST("student/ws/schedule-table/datum")
     suspend fun getScheduleDatum(@Body request: DatumRequest): ScheduleResponse
+
+    // 获取成绩数据。semesterId 传空字符串时返回全部学期成绩。
+    @GET("student/for-std/grade/sheet/get-grade-data/{gradeDataId}")
+    suspend fun getGradeDataBody(
+        @Path("gradeDataId") gradeDataId: Long,
+        @Query("semesterId") semesterId: String = ""
+    ): ResponseBody
 }
