@@ -17,6 +17,9 @@ captures/
 .externalNativeBuild/
 .cxx/
 
+# Codex local overrides
+.codex/
+
 # Build artifacts
 *.apk
 *.aab
