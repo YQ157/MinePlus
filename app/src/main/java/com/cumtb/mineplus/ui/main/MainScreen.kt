@@ -260,7 +260,7 @@ fun MainScreen(
                 }
 
                 composable(MainRoutes.Grades) {
-                    GradeScreen()
+                    GradeScreen(onRelogin = onRelogin)
                 }
 
                 composable(MainRoutes.More) {

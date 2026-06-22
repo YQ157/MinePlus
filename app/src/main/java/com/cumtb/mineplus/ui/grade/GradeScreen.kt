@@ -87,6 +87,7 @@ import kotlin.math.roundToInt
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GradeScreen(
+    onRelogin: () -> Unit = {},
     viewModel: GradeViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -135,7 +136,8 @@ fun GradeScreen(
                 errorMessage != null && !uiState.hasLoaded -> {
                     GradeErrorState(
                         message = errorMessage,
-                        onRetry = viewModel::refresh
+                        onRetry = viewModel::refresh,
+                        onRelogin = onRelogin
                     )
                 }
 
@@ -152,7 +154,8 @@ fun GradeScreen(
                         uiState = uiState,
                         onOverviewSelected = viewModel::onOverviewSelected,
                         onSemesterSelected = viewModel::onSemesterSelected,
-                        onRetry = viewModel::refresh
+                        onRetry = viewModel::refresh,
+                        onRelogin = onRelogin
                     )
                 }
             }
@@ -176,7 +179,8 @@ private fun GradeContent(
     uiState: GradeUiState,
     onOverviewSelected: () -> Unit,
     onSemesterSelected: (Int) -> Unit,
-    onRetry: () -> Unit
+    onRetry: () -> Unit,
+    onRelogin: () -> Unit
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -203,7 +207,11 @@ private fun GradeContent(
 
         uiState.errorMessage?.let { message ->
             item(key = "error_banner") {
-                GradeInlineError(message = message, onRetry = onRetry)
+                GradeInlineError(
+                    message = message,
+                    onRetry = onRetry,
+                    onRelogin = onRelogin
+                )
             }
         }
 
@@ -996,8 +1004,13 @@ private fun GradeCourseCard(grade: GradeItem) {
 @Composable
 private fun GradeInlineError(
     message: String,
-    onRetry: () -> Unit
+    onRetry: () -> Unit,
+    onRelogin: () -> Unit
 ) {
+    val requiresRelogin = message.requiresRelogin()
+    val actionText = if (requiresRelogin) "重新登录" else "重试"
+    val action = if (requiresRelogin) onRelogin else onRetry
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(8.dp),
@@ -1018,8 +1031,8 @@ private fun GradeInlineError(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onErrorContainer
             )
-            Button(onClick = onRetry) {
-                Text(text = "重试")
+            Button(onClick = action) {
+                Text(text = actionText)
             }
         }
     }
@@ -1051,8 +1064,13 @@ private fun GradeLoadingState() {
 @Composable
 private fun GradeErrorState(
     message: String,
-    onRetry: () -> Unit
+    onRetry: () -> Unit,
+    onRelogin: () -> Unit
 ) {
+    val requiresRelogin = message.requiresRelogin()
+    val actionText = if (requiresRelogin) "重新登录" else "重试"
+    val action = if (requiresRelogin) onRelogin else onRetry
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -1066,8 +1084,8 @@ private fun GradeErrorState(
             color = MaterialTheme.colorScheme.onBackground
         )
         Spacer(modifier = Modifier.height(Dimens.small2))
-        Button(onClick = onRetry) {
-            Text(text = "重试")
+        Button(onClick = action) {
+            Text(text = actionText)
         }
     }
 }
@@ -1116,6 +1134,12 @@ private fun GradeItem.detailText(): String {
         if (!calculateGp) add("不计绩点")
     }
     return parts.joinToString(" · ").ifBlank { semesterName }
+}
+
+private fun String.requiresRelogin(): Boolean {
+    return contains("登录状态已失效") ||
+        contains("登录失效") ||
+        contains("重新登录")
 }
 
 private data class GradeTrendPoint(
