@@ -81,6 +81,7 @@ fun MainScreen(
     onNavigateToAbout: () -> Unit,
     onRelogin: () -> Unit,
     onNavigateToLogin: () -> Unit,
+    onLogout: () -> Unit,
     navController: NavHostController = rememberNavController()
 ) {
     val items = listOf(
@@ -271,7 +272,8 @@ fun MainScreen(
                 composable(ServiceRoutes.Settings) {
                     SettingsScreen(
                         navController = navController,
-                        onNavigateToAbout = onNavigateToAbout
+                        onNavigateToAbout = onNavigateToAbout,
+                        onLogout = onLogout
                     )
                 }
                 

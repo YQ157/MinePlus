@@ -106,6 +106,14 @@ class MainActivity : ComponentActivity() {
                                             }
                                         }
                                     }
+                                },
+                                onLogout = {
+                                    mainViewModel.logout {
+                                        navController.navigate("login") {
+                                            popUpTo("schedule") { inclusive = true }
+                                            launchSingleTop = true
+                                        }
+                                    }
                                 }
                             )
                         }

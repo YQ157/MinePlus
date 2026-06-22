@@ -15,6 +15,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ExpandLess
@@ -48,9 +49,11 @@ import com.cumtb.mineplus.ui.theme.Dimens
 fun SettingsScreen(
     navController: NavController,
     onNavigateToAbout: () -> Unit,
+    onLogout: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    var showLogoutDialog by remember { mutableStateOf(false) }
     
     Scaffold(
         topBar = {
@@ -165,9 +168,32 @@ fun SettingsScreen(
             
             SettingItem(
                 title = "退出登录",
-                description = "退出当前账号",
-                enabled = false, // 暂时禁用
-                onClick = { /* TODO */ }
+                description = "清除本机登录状态与缓存",
+                icon = { Icon(imageVector = Icons.AutoMirrored.Filled.Logout, contentDescription = null) },
+                onClick = { showLogoutDialog = true }
+            )
+        }
+
+        if (showLogoutDialog) {
+            AlertDialog(
+                onDismissRequest = { showLogoutDialog = false },
+                title = { Text(text = "退出登录？") },
+                text = { Text(text = "将清除本机账号、Cookie、课表、成绩缓存，并关闭课前提醒。") },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            showLogoutDialog = false
+                            onLogout()
+                        }
+                    ) {
+                        Text(text = "退出登录")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showLogoutDialog = false }) {
+                        Text(text = "取消")
+                    }
+                }
             )
         }
     }

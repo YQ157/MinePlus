@@ -148,7 +148,10 @@ class MainViewModel @Inject constructor(
             prefs.setRememberPassword(false)
             credentialStorage.clear()
             prefs.clearAccountSession()
+            repository.clearLocalCache()
             gradeRepository.clearLocalCache()
+            reminderPrefs.setReminderEnabled(false)
+            reminderScheduler.cancelAllReminders()
             persistentCookieStore.clear()
 
             // 2) Clear WebView/OkHttp cookies (this app's CookieJar reads from CookieManager)

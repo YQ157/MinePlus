@@ -25,6 +25,10 @@ class CourseRepository @Inject constructor(
     private val prefs: AppPreferences,
 ) {
 
+    suspend fun clearLocalCache() = withContext(Dispatchers.IO) {
+        courseDao.clearAll()
+    }
+
     /**
      * 🚀 核心方法：刷新所有课表数据
      * 这个方法会执行完整的 ETL (Extract, Transform, Load) 流程
