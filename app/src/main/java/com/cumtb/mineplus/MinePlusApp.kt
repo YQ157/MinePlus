@@ -32,12 +32,6 @@ class MinePlusApp : Application() {
             cookieManager.setAcceptCookie(true)
             Log.d(TAG, "✅ Cookie 接受已启用")
             
-            // 启用第三方 Cookie（重要：确保跨域 Cookie 正常工作）
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-                cookieManager.setAcceptThirdPartyCookies(null, true)
-                Log.d(TAG, "✅ 第三方 Cookie 已启用")
-            }
-            
             // 确保 Cookie 立即写入磁盘（增强持久化）
             cookieManager.flush()
             Log.d(TAG, "✅ WebView 设置初始化完成")

@@ -1,6 +1,8 @@
 package com.cumtb.mineplus.di
 
 import com.cumtb.mineplus.data.api.SchoolApi
+import com.cumtb.mineplus.api.PersistentCookieStore
+import com.cumtb.mineplus.api.SchoolApiConfig
 import com.cumtb.mineplus.api.WebViewCookieJar
 import dagger.Module
 import dagger.Provides
@@ -20,8 +22,8 @@ object NetworkModule {
     // 1. 提供我们写的那个 CookieJar
     @Provides
     @Singleton
-    fun provideCookieJar(): WebViewCookieJar {
-        return WebViewCookieJar()
+    fun provideCookieJar(persistentCookieStore: PersistentCookieStore): WebViewCookieJar {
+        return WebViewCookieJar(persistentCookieStore)
     }
 
     // 2. 组装 OkHttpClient (要把 CookieJar 装进去)
@@ -49,7 +51,7 @@ object NetworkModule {
     fun provideRetrofit(okHttpClient: OkHttpClient): Retrofit {
         return Retrofit.Builder()
             // 👇 换成你们学校真实的教务系统域名
-            .baseUrl("https://jwxt.cumtb.edu.cn/")
+            .baseUrl(SchoolApiConfig.BASE_URL)
             .client(okHttpClient)
             .addConverterFactory(GsonConverterFactory.create()) // 支持 JSON 解析
             .build()

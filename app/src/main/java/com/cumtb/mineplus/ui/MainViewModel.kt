@@ -4,6 +4,7 @@ import android.util.Log
 import android.webkit.CookieManager
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.cumtb.mineplus.api.PersistentCookieStore
 import com.cumtb.mineplus.data.preference.AppPreferences
 import com.cumtb.mineplus.data.preference.CredentialStorage
 import com.cumtb.mineplus.data.repository.CourseRepository
@@ -23,7 +24,8 @@ class MainViewModel @Inject constructor(
     private val prefs: AppPreferences,
     private val credentialStorage: CredentialStorage,
     private val reminderScheduler: CourseReminderScheduler,
-    private val reminderPrefs: com.cumtb.mineplus.data.preference.ReminderPreferences
+    private val reminderPrefs: com.cumtb.mineplus.data.preference.ReminderPreferences,
+    private val persistentCookieStore: PersistentCookieStore
 ) : ViewModel() {
 
     data class SavedCredentialsState(
@@ -132,6 +134,7 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch {
             prefs.clearAccountSession()
             gradeRepository.clearLocalCache()
+            persistentCookieStore.clear()
             val cm = CookieManager.getInstance()
             cm.removeAllCookies(null)
             cm.flush()
@@ -146,6 +149,7 @@ class MainViewModel @Inject constructor(
             credentialStorage.clear()
             prefs.clearAccountSession()
             gradeRepository.clearLocalCache()
+            persistentCookieStore.clear()
 
             // 2) Clear WebView/OkHttp cookies (this app's CookieJar reads from CookieManager)
             val cm = CookieManager.getInstance()

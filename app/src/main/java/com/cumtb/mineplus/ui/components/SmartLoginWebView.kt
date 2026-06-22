@@ -3,6 +3,7 @@ package com.cumtb.mineplus.ui.components
 import android.annotation.SuppressLint
 import android.graphics.Bitmap
 import android.net.http.SslError
+import android.os.Build
 import android.util.Log
 import android.webkit.*
 import androidx.compose.foundation.layout.fillMaxSize
@@ -53,6 +54,10 @@ fun SmartLoginWebView(
         modifier = if (visible) Modifier.fillMaxSize() else Modifier,
         factory = { context ->
             WebView(context).apply {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                    CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
+                }
+
                 // 即使 AndroidView 自己不占空间，也让 WebView 本身有“最小尺寸”，避免 0 尺寸导致网页脚本异常。
                 if (!visible) {
                     layoutParams = android.view.ViewGroup.LayoutParams(1, 1)
