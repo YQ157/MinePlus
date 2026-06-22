@@ -6,6 +6,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -27,6 +28,7 @@ fun ReminderSettingsScreen(
     viewModel: ReminderSettingsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    var showReminderHelp by remember { mutableStateOf(false) }
 
     // 页面回到前台时自动刷新一次（用户从系统设置返回时体验更好）
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -70,6 +72,37 @@ fun ReminderSettingsScreen(
             )
         }
     ) { innerPadding ->
+        if (showReminderHelp) {
+            AlertDialog(
+                onDismissRequest = { showReminderHelp = false },
+                title = { Text(text = "课前提醒说明") },
+                text = {
+                    Column {
+                        Text(
+                            text = "默认提醒规则：",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = """
+                                • 在每节课开始前 15 分钟发送一条通知提醒（而不是闹钟），包含有教室、教师等信息。默认关闭声音，开启振动。
+                                • 如果通知提醒时刻正好处于另一节课的上课时间内，会顺延到那节课下课时提醒，避免上课中打扰。
+
+                                　　提醒是否准时还会受系统权限和后台限制影响，建议按需开启通知、精确闹钟、电池优化白名单等权限。
+                                　　推荐开启熄屏通知、锁屏通知和悬浮通知等权限，方便查看教室位置。
+                            """.trimIndent(),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showReminderHelp = false }) {
+                        Text(text = "知道了")
+                    }
+                }
+            )
+        }
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -80,10 +113,11 @@ fun ReminderSettingsScreen(
             // 主开关
             SettingItemWithSwitch(
                 title = "课前提醒",
-                description = "开启后将在每节课前15分钟提醒您",
+                description = "",
                 icon = { Icon(imageVector = Icons.Filled.Alarm, contentDescription = null) },
                 checked = uiState.isReminderEnabled,
-                onCheckedChange = { viewModel.toggleReminder(it) }
+                onCheckedChange = { viewModel.toggleReminder(it) },
+                onHelpClick = { showReminderHelp = true }
             )
             
             Spacer(modifier = Modifier.height(Dimens.screenPaddingCompact))
@@ -218,7 +252,8 @@ private fun SettingItemWithSwitch(
     description: String,
     icon: @Composable (() -> Unit)? = null,
     checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit
+    onCheckedChange: (Boolean) -> Unit,
+    onHelpClick: (() -> Unit)? = null
 ) {
     Row(
         modifier = Modifier
@@ -234,11 +269,30 @@ private fun SettingItemWithSwitch(
         Column(
             modifier = Modifier.weight(1f)
         ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+
+                if (onHelpClick != null) {
+                    IconButton(
+                        onClick = onHelpClick,
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.HelpOutline,
+                            contentDescription = "课前提醒说明",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+            }
             
             if (description.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(4.dp))
