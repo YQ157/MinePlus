@@ -2,6 +2,7 @@ package com.cumtb.mineplus.ui.components
 
 import android.annotation.SuppressLint
 import android.graphics.Bitmap
+import android.net.Uri
 import android.net.http.SslError
 import android.os.Build
 import android.util.Log
@@ -14,6 +15,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
+import com.cumtb.mineplus.api.SchoolApiConfig
 import kotlinx.coroutines.delay
 
 @SuppressLint("SetJavaScriptEnabled")
@@ -80,7 +82,13 @@ fun SmartLoginWebView(
                     }
 
                     override fun onReceivedSslError(view: WebView?, handler: SslErrorHandler?, error: SslError?) {
-                        handler?.proceed() // 忽略 SSL 错误
+                        val sslErrorUrl = error?.url ?: view?.url
+                        val host = runCatching { Uri.parse(sslErrorUrl).host }.getOrNull()
+                        if (SchoolApiConfig.isTrustedSchoolHost(host)) {
+                            handler?.proceed()
+                        } else {
+                            handler?.cancel()
+                        }
                     }
 
                     override fun onPageFinished(view: WebView?, url: String?) {

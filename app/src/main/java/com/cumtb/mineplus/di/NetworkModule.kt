@@ -1,6 +1,8 @@
 package com.cumtb.mineplus.di
 
 import android.annotation.SuppressLint
+import android.content.Context
+import android.content.pm.ApplicationInfo
 import com.cumtb.mineplus.data.api.SchoolApi
 import com.cumtb.mineplus.api.PersistentCookieStore
 import com.cumtb.mineplus.api.SchoolApiConfig
@@ -8,6 +10,7 @@ import com.cumtb.mineplus.api.WebViewCookieJar
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
@@ -36,17 +39,26 @@ object NetworkModule {
     // 2. 组装 OkHttpClient (要把 CookieJar 装进去)
     @Provides
     @Singleton
-    fun provideOkHttpClient(cookieJar: WebViewCookieJar): OkHttpClient {
+    fun provideOkHttpClient(
+        cookieJar: WebViewCookieJar,
+        @ApplicationContext context: Context
+    ): OkHttpClient {
+        val isDebuggable = context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
+
         // 日志拦截器，方便你在 Logcat 里看请求和响应
         val logging = HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BODY
+            level = if (isDebuggable) {
+                HttpLoggingInterceptor.Level.BODY
+            } else {
+                HttpLoggingInterceptor.Level.NONE
+            }
         }
         val (sslSocketFactory, trustManager) = createTrustAllSslSocketFactory()
 
         return OkHttpClient.Builder()
             .cookieJar(cookieJar) // 👈 关键：装上 Cookie 立交桥
             .sslSocketFactory(sslSocketFactory, trustManager)
-            .hostnameVerifier { _, _ -> true }
+            .hostnameVerifier { host, _ -> SchoolApiConfig.isTrustedSchoolHost(host) }
             .addInterceptor(logging)
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)

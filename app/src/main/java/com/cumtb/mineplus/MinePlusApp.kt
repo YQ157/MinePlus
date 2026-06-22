@@ -1,6 +1,7 @@
 package com.cumtb.mineplus
 
 import android.app.Application
+import android.content.pm.ApplicationInfo
 import android.util.Log
 import android.webkit.CookieManager
 import android.webkit.WebView
@@ -22,8 +23,9 @@ class MinePlusApp : Application() {
     
     private fun initWebViewSettings() {
         try {
-            // 启用 WebView 的文件访问（调试模式下）
-            WebView.setWebContentsDebuggingEnabled(true)
+            val webViewDebuggingEnabled =
+                applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
+            WebView.setWebContentsDebuggingEnabled(webViewDebuggingEnabled)
             
             // 初始化 Cookie 管理器
             val cookieManager = CookieManager.getInstance()
