@@ -1,5 +1,6 @@
 package com.cumtb.mineplus.notification
 
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -18,11 +19,12 @@ import com.cumtb.mineplus.R
 class CourseNotificationHelper(private val context: Context) {
 
     companion object {
-        private const val CHANNEL_ID_COURSE_REMINDER = "course_reminder_channel"
+        private const val CHANNEL_ID_COURSE_REMINDER = "course_reminder_channel_vibrate"
         private const val CHANNEL_NAME_COURSE_REMINDER = "课前提醒"
         private const val CHANNEL_DESCRIPTION_COURSE_REMINDER = "课程开始前提醒通知"
 
         private const val NOTIFICATION_GROUP_COURSE = "course_reminders"
+        private val COURSE_REMINDER_VIBRATION_PATTERN = longArrayOf(0L, 250L, 120L, 250L)
     }
 
     private val notificationManager = NotificationManagerCompat.from(context)
@@ -42,11 +44,10 @@ class CourseNotificationHelper(private val context: Context) {
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = CHANNEL_DESCRIPTION_COURSE_REMINDER
-                // 需求：不要声音不要振动，但要“浮窗”（heads-up）。
-                // heads-up 主要由 IMPORTANCE_HIGH 决定；声音/振动由 channel 决定。
+                // 默认无声但振动；heads-up 主要由 IMPORTANCE_HIGH 决定。
                 setSound(null, null)
-                enableVibration(false)
-                vibrationPattern = null
+                enableVibration(true)
+                vibrationPattern = COURSE_REMINDER_VIBRATION_PATTERN
                 enableLights(true)
             }
 
@@ -79,7 +80,7 @@ class CourseNotificationHelper(private val context: Context) {
 
             // 构建通知
             val builder = NotificationCompat.Builder(context, CHANNEL_ID_COURSE_REMINDER)
-                .setSmallIcon(R.drawable.ic_notification) // 需要添加通知图标
+                .setSmallIcon(R.drawable.ic_notification)
                 .setContentTitle(title)
                 .setContentText(content)
                 .setStyle(NotificationCompat.BigTextStyle().bigText(content))
@@ -89,11 +90,10 @@ class CourseNotificationHelper(private val context: Context) {
                 .setAutoCancel(true)
                 .setContentIntent(pendingIntent)
                 .setGroup(NOTIFICATION_GROUP_COURSE)
-                // 需求：通知静音（channel 已静音；这里再明确一次，避免旧机型/兼容层差异）
-                .setSilent(true)
+                .setDefaults(Notification.DEFAULT_VIBRATE)
+                .setVibrate(COURSE_REMINDER_VIBRATION_PATTERN)
 
-            // 不使用 DEFAULT_ALL/DEFAULT_VIBRATE，避免声音与震动
-            // endReminder 与否对“静音”无差别保留参数仅用于内容/标题区分
+            // Android 8.0+ 由 channel 控制振动；旧系统使用 DEFAULT_VIBRATE 和 pattern。
 
             // 显示通知
             if (NotificationManagerCompat.from(context).areNotificationsEnabled()) {

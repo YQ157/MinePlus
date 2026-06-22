@@ -80,13 +80,13 @@ class CourseReminderReceiver : BroadcastReceiver() {
         try {
             val notificationHelper = CourseNotificationHelper(context)
 
-            // 标题：课程名-教室
-            val title = "$courseName-$room"
+            // 标题只放课程名，避免教室挤占标题展示空间。
+            val title = courseName
 
-            // 内容：时间 + 教师（去掉“还有多久上课”）
+            // 内容：第一行教室；第二行时间和教师。
             val content = buildString {
-                append("时间: $startTime-$endTime\n")
-                append("教师: $teacherName")
+                append("教室: $room\n")
+                append("时间: $startTime-$endTime  教师: $teacherName")
             }
 
             notificationHelper.showCourseReminder(
