@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Grade
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material3.*
@@ -104,6 +105,16 @@ fun SettingsScreen(
                 description = if (uiState.isReminderEnabled) "已开启" else "未开启",
                 icon = { Icon(imageVector = Icons.Filled.Alarm, contentDescription = null) },
                 onClick = { navController.navigate("reminder_settings") }
+            )
+
+            Spacer(modifier = Modifier.height(Dimens.small2))
+
+            SettingItem(
+                title = "成绩提醒",
+                description = "及时通知新出炉成绩",
+                icon = { Icon(imageVector = Icons.Filled.Grade, contentDescription = null) },
+                enabled = false,
+                onClick = { /* TODO */ }
             )
 
             Spacer(modifier = Modifier.height(Dimens.small2))
